@@ -1,24 +1,42 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/pkg/chord"
 	"github.com/gin-gonic/gin"
 )
 
-var users = []models.User{
-    {ID: "1", Name: "John Doe", Age: 30},
-    {ID: "2", Name: "Jane Doe", Age: 25},
-}
-
 // SetupRoutes initializes the API routes
 func SetupRoutes(router *gin.Engine) {
-    router.GET("/users", getUsers)
-    router.GET("/users/:id", getUser)
-    router.POST("/users", createUser)
     router.GET("/node_identifier",getNodeAddressAndIdentifier)
+    router.GET("/health_check",health_check)
+    router.POST("/find_successor",find_successor)
+}
+
+func find_successor(c *gin.Context){
+    var req models.Request
+
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.Response{
+            Message: "Invalid request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    // handle request
+    fmt.Println("id ",req.ID)
+
+    chord.HandleFindSuccessor(req,c)
+}
+
+func health_check(c *gin.Context){
+    c.JSON(http.StatusOK, gin.H{"message":"good health"})
 }
 
 func getNodeAddressAndIdentifier(c *gin.Context) {
@@ -27,27 +45,4 @@ func getNodeAddressAndIdentifier(c *gin.Context) {
 }
 
 
-func getUsers(c *gin.Context) {
-    c.JSON(http.StatusOK, users)
-}
 
-func getUser(c *gin.Context) {
-    id := c.Param("id")
-    for _, user := range users {
-        if user.ID == id {
-            c.JSON(http.StatusOK, user)
-            return
-        }
-    }
-    c.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
-}
-
-func createUser(c *gin.Context) {
-    var newUser models.User
-    if err := c.ShouldBindJSON(&newUser); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
-    users = append(users, newUser)
-    c.JSON(http.StatusCreated, newUser)
-}

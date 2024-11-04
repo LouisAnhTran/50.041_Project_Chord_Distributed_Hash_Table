@@ -1,6 +1,7 @@
 package config
 
 const (
-	HashRange = 100
+	HashRange = 200
+	FingerTableEntry=5
 )
 

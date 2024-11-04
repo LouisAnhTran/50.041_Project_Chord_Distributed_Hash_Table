@@ -6,6 +6,7 @@ import (
     "math/big"
     "sort"
     "github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
+    "math"
 
 )
 
@@ -30,20 +31,77 @@ func extractKey(node map[int]string) int {
     return 0
 }
 
-func FindSuccessorForNode(id *int) int {
+func populate_all_node_id_and_sort() {
+    all_node_id:=[]int{}
+
+    for key := range config.AllNodeMap {
+        all_node_id=append(all_node_id, key)
+    }
+    
+    sort.Ints(all_node_id)
+
+    config.AllNodeID=all_node_id
+
+}
+
+func FindSuccessorForNode() int {
     // Initialize index to -1 to indicate not found
     index_node:=0
 
-    // Iterate through the slice of maps
-    for i, nodeMap := range config.SliceOfNodeMap {
-        // Check if the key exists in the map
-        if _, exists := nodeMap[*id]; exists {
-            index_node = i // Set the index if the key exists
-            break     // Exit the loop since we found the key
+    for i := range config.AllNodeID {
+        if config.AllNodeID[i] == local_node.ID {
+            index_node=i
+            break
         }
     }
 
-    return (index_node+1) % len(config.SliceOfNodeMap)
+    return config.AllNodeID[(index_node+1) % len(config.AllNodeID)]
+}
+
+func FindPredecessorForNode() int {
+    // Initialize index to -1 to indicate not found
+    index_node:=0
+
+    for i := range config.AllNodeID {
+        if config.AllNodeID[i] == local_node.ID {
+            index_node=i
+            break
+        }
+    }
+
+    if index_node==0 {
+        return config.AllNodeID[len(config.AllNodeID)-1]
+    }
+    return config.AllNodeID[index_node-1]
+}
+
+func PopulateFingerTable() {
+    // Initialize index to -1 to indicate not found
+   
+
+    for i:=1;i<=config.FingerTableEntry;i++ {
+        adjusted_index := (local_node.ID + int(math.Pow(2, float64(i-1)))) % config.HashRange
+        successor:=find_successor_for_fingertable_entry(adjusted_index)
+        map_adjusted_index:=map[int]int{adjusted_index:successor}
+        local_node.FingerTable=append(local_node.FingerTable,map_adjusted_index)
+    }
+}
+
+func find_successor_for_fingertable_entry(entry_index int) int {
+    found_index:=-1
+
+    for i:=1;i<len(config.AllNodeID);i++ {
+        if entry_index > config.AllNodeID[i-1] && entry_index <= config.AllNodeID[i] {
+            found_index=i
+            break
+        }
+    }
+
+    if found_index == -1 {
+        found_index=0
+    } 
+
+    return config.AllNodeID[found_index]
 }
 
 // InRange checks if a target ID is in the range (start, end) on the Chord ring.

@@ -13,6 +13,6 @@ var NodeAddresses = []string{
     "node10:8080",
 }
 
-var SliceOfNodeMap=[]map[int]string{}
+var AllNodeID=[]int{}
 
 var AllNodeMap=map[int]string{}

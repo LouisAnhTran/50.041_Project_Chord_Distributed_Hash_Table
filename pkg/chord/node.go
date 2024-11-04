@@ -10,7 +10,7 @@ var local_node = &Node{
     Address: os.Getenv("NODE_ADDRESS"),
     Successor: 0,
     Predecessor: 0,
-    FingerTable: []int{},
+    FingerTable: []map[int]int{},
 }
 
 // Node represents a single node in the Chord network.
@@ -19,7 +19,7 @@ type Node struct {
     Address  string  // Network address of the node
     Successor int  // Pointer to the successor node in the network
     Predecessor int // Pointer to the predecessor node (optional, but can be useful)
-    FingerTable []int 
+    FingerTable []map[int]int
 }
 
 // NewNode initializes and returns a new node with the given ID and address.

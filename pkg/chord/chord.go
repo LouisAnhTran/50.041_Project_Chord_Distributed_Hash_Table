@@ -2,6 +2,7 @@ package chord
 
 import (
 	"fmt"
+    "bytes"
 	"log"
 	"net/http"
     "encoding/json"
@@ -10,6 +11,8 @@ import (
     "time"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
     "github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
+    "github.com/gin-gonic/gin"
+
 )
 
 // JoinNetwork is an exported function (capitalized) that allows a node to join the network.
@@ -56,37 +59,108 @@ func InitChordRingStructure(){
 
             // Append data to slice of node map
             config.AllNodeMap[response.Data]=node_address
-
-            // Assuming NodeList is a map where you store this data
-            map_node:=map[int]string{response.Data:node_address}
-            config.SliceOfNodeMap=append(config.SliceOfNodeMap, map_node)
         }        
     }
 
     // Append data to slice of node map
     config.AllNodeMap[HashToRange(os.Getenv("NODE_ADDRESS"))]=os.Getenv("NODE_ADDRESS")
 
-    // Assuming NodeList is a map where we store this data
-    map_node:=map[int]string{HashToRange(os.Getenv("NODE_ADDRESS")):os.Getenv("NODE_ADDRESS")}
-    config.SliceOfNodeMap=append(config.SliceOfNodeMap, map_node)
-
-    // Sorting all the nodes by identifier to determine successor and predecessor
-    fmt.Println("config node list before sorting: ",config.SliceOfNodeMap)
-
-    SortByKey(&config.SliceOfNodeMap)
-
-    fmt.Println("config node list after sorting: ",config.SliceOfNodeMap)
-
-    fmt.Println("Total map: ",config.AllNodeMap)
+    // Populate all node ID
+    populate_all_node_id_and_sort()
 
     // Set node property
     local_node.ID=HashToRange(os.Getenv("NODE_ADDRESS"))
-    
+
+    fmt.Println("print all sorted node ids: ",config.AllNodeID)
+
+
     // determine successor
-    fmt.Println("index of successor for ",local_node.ID,": ",FindSuccessorForNode(&local_node.ID))
+    var successor=FindSuccessorForNode()
+    local_node.Successor=successor
+    fmt.Println("my id ",local_node.ID, " my successor is: ",local_node.Successor)
 
+    // determine predecessor 
+    var predecessor=FindPredecessorForNode()
+    local_node.Predecessor=predecessor
+    fmt.Println("my id ",local_node.ID, " my predecessor is: ",local_node.Predecessor)
 
+    // Populate Finger Table
+    PopulateFingerTable()
+    fmt.Println("my all node id: ",config.AllNodeID," || my id is: ",local_node.ID," || my finger table: ",local_node.FingerTable," || my map: ",config.AllNodeMap," || my successor: ",local_node.Successor," || predecessor: ",local_node.Predecessor)
 } 
+
+func HandleFindSuccessor(req models.Request,c *gin.Context) int {
+    if req.ID > local_node.ID && req.ID <= local_node.Successor {
+        fmt.Println("I found successor: ",local_node.Successor)
+        c.JSON(http.StatusOK,gin.H{
+            "successor":local_node.Successor})
+        return 1
+    }
+
+    closest_preceding_node:=find_closest_preceding_node(req.ID)
+
+    fmt.Println("closest preceding node: ",closest_preceding_node)
+
+    address_closest_proceed_node:=config.AllNodeMap[closest_preceding_node]
+
+    // prepare request
+    jsonData, err := json.Marshal(req)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        return -1
+    }
+
+    url:=fmt.Sprintf("http://%s/find_successor",address_closest_proceed_node)
+
+     // Create a new request
+    new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        return -1
+    }
+
+    // Send the request using the http.Client
+    client := &http.Client{}
+    response, err := client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request:", err)
+        return -1
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        return -1
+    }
+
+    // Read and print the response body
+    var responseBody map[string]interface{}
+    if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+        fmt.Println("Error decoding response body:", err)
+        return -1
+    }
+
+    fmt.Println("Response from server:", responseBody)
+
+    c.JSON(http.StatusOK,gin.H{
+        "successor":responseBody["successor"]})
+
+    return 0
+}
+
+func find_closest_preceding_node(node_id int) int{
+    for i:=len(local_node.FingerTable)-1;i>=0;i-- {
+        for k,v := range local_node.FingerTable[i] {
+            fmt.Println("k is: ",k," v: ",v)
+            if v < node_id {
+                return v
+            }
+        }
+    }
+    return local_node.ID
+}
+
 
 // FindSuccessor is another exported function to find the successor of a given key.
 func FindSuccessor(key string) string {
