@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
+    "strconv"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/pkg/chord"
 	"github.com/gin-gonic/gin"
@@ -17,7 +17,38 @@ func SetupRoutes(router *gin.Engine) {
     router.POST("/find_successor",find_successor)
     router.POST("/store_data",store_data)
     router.POST("/internal_store_data",internal_store_data)
+    router.GET("/retrieve_data/:id",retrieve_data)
+    router.GET("/internal_retrieve_data/:id",internal_retrieve_data)
+}
 
+func retrieve_data(c *gin.Context){
+    // to do
+    key_str := c.Param("id")
+
+    key,err:=strconv.Atoi(key_str)
+    if err != nil {
+        c.JSON(http.StatusBadRequest,models.RetrieveDataResponse{Message: "Invalid ID format"})
+        return
+    }
+
+    fmt.Println("key of data to be retrieved: ",key)
+
+    chord.HandleRetrieveData(key,c)
+}
+
+func internal_retrieve_data(c *gin.Context){
+    // to do
+    key_str := c.Param("id")
+
+    key,err:=strconv.Atoi(key_str)
+    if err != nil {
+        c.JSON(http.StatusBadRequest,models.InternalRetrieveDataResponse{Message: "Invalid ID format"})
+        return
+    }
+
+    fmt.Println("key of data to be retrieved: ",key)
+
+    chord.HandleInternalRetrieveData(key,c)
 }
 
 func store_data(c *gin.Context) {
@@ -40,7 +71,22 @@ func store_data(c *gin.Context) {
 }
 
 func internal_store_data(c *gin.Context){
-    
+    // to do
+    var req models.InternalStoreDataRequest
+
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.StoreDataResponsee{
+            Message: "Invalid request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    fmt.Println("data to be stored: ",req.Data)
+    fmt.Println("key of data to be stored: ",req.Key)
+
+    chord.HandleInternalStoreData(req,c)
 }
 
 func find_successor(c *gin.Context){

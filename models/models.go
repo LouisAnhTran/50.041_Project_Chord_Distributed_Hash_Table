@@ -35,6 +35,32 @@ type StoreDataRequest struct {
 // Response struct to format the response JSON
 type StoreDataResponsee struct {
     Message string `json:"message"`
-    Key string `json:"key,omitempty"`
+    Key int `json:"key,omitempty"`
+    Error   string  `json:"error,omitempty"`
+}
+
+// Response struct to format the response JSON
+type InternalStoreDataRequest struct {
+    Message string `json:"message"`
+    Key int `json:"key,omitempty"`
+    Data string  `json:"data,omitempty"`
+}
+
+// Response struct to format the response JSON
+type InternalStoreDataResponse struct {
+    Message string `json:"message"`
+    Error   string  `json:"error,omitempty"`
+}
+
+
+type RetrieveDataResponse struct {
+    Message string `json:"message"`
+    Data string  `json:"data,omitempty"`
+    Error   string  `json:"error,omitempty"`
+}
+
+type InternalRetrieveDataResponse struct {
+    Message string `json:"message"`
+    Data string `json:"data,omitempty"`
     Error   string  `json:"error,omitempty"`
 }
