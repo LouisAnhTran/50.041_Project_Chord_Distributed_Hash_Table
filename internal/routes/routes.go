@@ -15,14 +15,40 @@ func SetupRoutes(router *gin.Engine) {
     router.GET("/node_identifier",getNodeAddressAndIdentifier)
     router.GET("/health_check",health_check)
     router.POST("/find_successor",find_successor)
+    router.POST("/store_data",store_data)
+    router.POST("/internal_store_data",internal_store_data)
+
 }
 
-func find_successor(c *gin.Context){
-    var req models.Request
+func store_data(c *gin.Context) {
+    // to do
+    var req models.StoreDataRequest
 
     // Bind JSON data to the request struct
     if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, models.Response{
+        c.JSON(http.StatusBadRequest, models.StoreDataResponsee{
+            Message: "Invalid request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    fmt.Println("data to be stored: ",req.Data)
+
+    chord.HandleStoreData(req,c)
+
+}
+
+func internal_store_data(c *gin.Context){
+    
+}
+
+func find_successor(c *gin.Context){
+    var req models.FindSuccessorRequest
+
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.FindSuccessorErrorResponse{
             Message: "Invalid request",
             Error:   err.Error(),
         })
@@ -30,7 +56,7 @@ func find_successor(c *gin.Context){
     }
 
     // handle request
-    fmt.Println("id ",req.ID)
+    fmt.Println("key from request ",req.Key)
 
     chord.HandleFindSuccessor(req,c)
 }

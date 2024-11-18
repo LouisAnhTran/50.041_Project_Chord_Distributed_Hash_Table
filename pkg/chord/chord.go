@@ -89,15 +89,98 @@ func InitChordRingStructure(){
     fmt.Println("my all node id: ",config.AllNodeID," || my id is: ",local_node.ID," || my finger table: ",local_node.FingerTable," || my map: ",config.AllNodeMap," || my successor: ",local_node.Successor," || predecessor: ",local_node.Predecessor)
 } 
 
-func HandleFindSuccessor(req models.Request,c *gin.Context) int {
-    if req.ID > local_node.ID && req.ID <= local_node.Successor {
-        fmt.Println("I found successor: ",local_node.Successor)
-        c.JSON(http.StatusOK,gin.H{
-            "successor":local_node.Successor})
-        return 1
+func HandleStoreData(req models.StoreDataRequest,c *gin.Context) {
+    convert_data_to_identifier:=HashToRange(req.Data)
+
+    fmt.Println("the key of this data is: ",convert_data_to_identifier)
+
+    // we need to find the successor for this key first
+    // create new reques
+    find_successor_request:=models.FindSuccessorRequest{
+        Key: convert_data_to_identifier,
     }
 
-    closest_preceding_node:=find_closest_preceding_node(req.ID)
+    // prepare request
+    jsonData, err := json.Marshal(find_successor_request)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error marshaling JSON",
+            Error:   err.Error(),
+        })
+        return 
+    }
+
+    closest_preceding_node:=find_closest_preceding_node(convert_data_to_identifier)
+
+    fmt.Println("closest preceding node: ",closest_preceding_node)
+
+    address_closest_proceed_node:=config.AllNodeMap[closest_preceding_node]
+
+    url:=fmt.Sprintf("http://%s/find_successor",address_closest_proceed_node)
+
+     // Create a new request
+    new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error creating request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    // Send the request using the http.Client
+    client := &http.Client{}
+    response, err := client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error making POST request",
+            Error:   err.Error(),
+        })
+        return 
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error",
+        })
+        return 
+    }
+
+    // Read and print the response body
+    var responseBody models.FindSuccessorSuccessResponse
+    if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+        fmt.Println("Error decoding response body", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error decoding response body",
+            Error:   err.Error(),
+        })
+        return 
+    }
+
+    fmt.Println("Response from server:", responseBody)
+
+
+    c.JSON(http.StatusOK,models.FindSuccessorSuccessResponse{
+        Message: "Successfully find successor",
+        Successor: responseBody.Successor,
+    })
+}
+
+func HandleFindSuccessor(req models.FindSuccessorRequest,c *gin.Context)  {
+    if req.Key > local_node.ID && req.Key <= local_node.Successor {
+        fmt.Println("I found successor: ",local_node.Successor)
+        c.JSON(http.StatusOK,models.FindSuccessorSuccessResponse{
+            Successor:local_node.Successor})
+        return 
+    }
+
+    closest_preceding_node:=find_closest_preceding_node(req.Key)
 
     fmt.Println("closest preceding node: ",closest_preceding_node)
 
@@ -107,7 +190,11 @@ func HandleFindSuccessor(req models.Request,c *gin.Context) int {
     jsonData, err := json.Marshal(req)
     if err != nil {
         fmt.Println("Error marshaling JSON:", err)
-        return -1
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error marshaling JSON",
+            Error:   err.Error(),
+        })
+        return 
     }
 
     url:=fmt.Sprintf("http://%s/find_successor",address_closest_proceed_node)
@@ -116,37 +203,63 @@ func HandleFindSuccessor(req models.Request,c *gin.Context) int {
     new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
     if err != nil {
         fmt.Println("Error creating request:", err)
-        return -1
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error creating request",
+            Error:   err.Error(),
+        })
+        return
     }
 
     // Send the request using the http.Client
     client := &http.Client{}
     response, err := client.Do(new_req)
     if err != nil {
-        fmt.Println("Error making POST request:", err)
-        return -1
+        fmt.Println("Error making POST request", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error making POST request",
+            Error:   err.Error(),
+        })
+        return 
     }
     defer response.Body.Close()
 
     // Check the response status code
     if response.StatusCode != http.StatusOK {
         fmt.Println("Error: received non-200 response status:", response.Status)
-        return -1
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error",
+        })
+        return 
     }
 
     // Read and print the response body
-    var responseBody map[string]interface{}
+    var responseBody models.FindSuccessorSuccessResponse
     if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
-        fmt.Println("Error decoding response body:", err)
-        return -1
+        fmt.Println("Error decoding response body", err)
+        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
+            Message: "Server error - Error decoding response body",
+            Error:   err.Error(),
+        })
+        return 
     }
 
     fmt.Println("Response from server:", responseBody)
 
-    c.JSON(http.StatusOK,gin.H{
-        "successor":responseBody["successor"]})
+    node_to_store_data:=responseBody.Successor
+    fmt.Println("id of node to store data, successor of data: ",node_to_store_data)
 
-    return 0
+    node_to_store_data_address:=config.AllNodeMap[node_to_store_data]
+    fmt.Println("the addresss of node to store data: ",node_to_store_data_address)
+
+    // now we send request requesting this node to store data
+    // TO DO
+
+
+    c.JSON(http.StatusOK,models.FindSuccessorSuccessResponse{
+        Message: "Successfully find successor",
+        Successor: responseBody.Successor,
+    })
+
 }
 
 func find_closest_preceding_node(node_id int) int{

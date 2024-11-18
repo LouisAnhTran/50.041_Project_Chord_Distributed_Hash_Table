@@ -12,14 +12,29 @@ type ResponseNodeIdentifier struct {
 }
 
 // Request struct to bind the incoming JSON
-type Request struct {
-    ID  int `json:"id" binding:"required"`
+type FindSuccessorRequest struct {
+    Key  int `json:"key" binding:"required"`
 }
 
+// Response struct to format the response JSON
+type FindSuccessorErrorResponse struct {
+    Message string `json:"message"`
+    Error   string  `json:"error,omitempty"`
+}
 
 // Response struct to format the response JSON
-type Response struct {
+type FindSuccessorSuccessResponse struct {
+    Successor int `json:"successor"`
+    Message   string  `json:"message,omitempty"`
+}
+
+type StoreDataRequest struct {
+    Data  string `json:"data" binding:"required"`
+}
+
+// Response struct to format the response JSON
+type StoreDataResponsee struct {
     Message string `json:"message"`
-    Data    *Request `json:"data,omitempty"`
+    Key string `json:"key,omitempty"`
     Error   string  `json:"error,omitempty"`
 }
