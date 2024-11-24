@@ -65,8 +65,8 @@ type InternalRetrieveDataResponse struct {
 }
 
 type LeaveRingMessage struct {
-	DepartingNodeID int
-	Keys            map[int]string
-	NewSuccessor    int // last node in departing node's successor list to be added to target node's successor list
-	NewPredecessor  int // departing node's predecessor
+	DepartingNodeID int            `json:"departing_node_id"`
+	Keys            map[int]string `json:"keys"`
+	NewSuccessor    int            `json:"new_successor"`   // last node in departing node's successor list to be added to target node's successor list
+	NewPredecessor  int            `json:"new_predecessor"` // departing node's predecessor
 }
