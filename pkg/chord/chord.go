@@ -1,18 +1,18 @@
 package chord
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-    "bytes"
+	"io/ioutil"
 	"log"
 	"net/http"
-    "encoding/json"
-    "io/ioutil"
 	"os"
-    "time"
-	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
-    "github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
-    "github.com/gin-gonic/gin"
+	"time"
 
+	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
+	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
+	"github.com/gin-gonic/gin"
 )
 
 // JoinNetwork is an exported function (capitalized) that allows a node to join the network.
@@ -178,10 +178,22 @@ func HandleStoreData(req models.StoreDataRequest,c *gin.Context) {
 }
 
 func HandleFindSuccessor(req models.FindSuccessorRequest,c *gin.Context)  {
+    // this normal case where the node does not have the highest id
     if req.Key > local_node.ID && req.Key <= local_node.Successor {
         fmt.Println("I found successor: ",local_node.Successor)
         c.JSON(http.StatusOK,models.FindSuccessorSuccessResponse{
-            Successor:local_node.Successor})
+            Successor:local_node.Successor,
+            Message: "Successfully found successor",
+        })
+        return 
+    }
+
+    // this special case if the node has the highest id
+    if req.Key > config.AllNodeID[len(config.AllNodeID)-1] || req.Key < config.AllNodeID[0] {
+        fmt.Println("I found successor: ",config.AllNodeID[0])
+        c.JSON(http.StatusOK,models.FindSuccessorSuccessResponse{
+            Successor:config.AllNodeID[0],
+        Message: "Successfully found successor",})
         return 
     }
 
@@ -504,7 +516,7 @@ func find_closest_preceding_node(node_id int) int{
             }
         }
     }
-    return local_node.ID
+    return local_node.Successor
 }
 
 
