@@ -75,3 +75,15 @@ type NotifyResponse struct {
     Message string `json:"message"`
     Error   string  `json:"error,omitempty"`
 }
+
+type StablizationSuccessorRequest struct {
+    Message string `json:"message"`
+    Key int `json:"key"`
+    NodeAddress string `json:"node_address"`
+}
+
+type StablizationSuccessorResponse struct {
+    Message string `json:"message"`
+    Error   string  `json:"error,omitempty"`
+}
+

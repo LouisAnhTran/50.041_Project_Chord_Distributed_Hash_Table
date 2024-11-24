@@ -21,8 +21,32 @@ func SetupRoutes(router *gin.Engine) {
     router.GET("/retrieve_data/:id",retrieve_data)
     router.GET("/internal_retrieve_data/:id",internal_retrieve_data)
     router.POST("/notify",notify)
+    router.POST("/start_stablization",start_stablization)
+
 
 }
+
+func start_stablization(c *gin.Context){
+    // to do
+    var req models.StablizationSuccessorRequest
+
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.StablizationSuccessorResponse{
+            Message: "Invalid request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    fmt.Println("message from succesor: ",req.Message)
+    fmt.Println("succesor send new node id: ",req.Key)
+    fmt.Println("succesor send new node address: ",req.NodeAddress)
+
+
+    chord.HandleStartStablization(req,c)
+}
+
 
 func notify(c *gin.Context){
     // to do

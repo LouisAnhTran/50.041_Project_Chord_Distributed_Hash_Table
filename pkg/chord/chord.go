@@ -148,7 +148,7 @@ func NewNodeJoinNetwork() {
     fmt.Println("Response from server: ", newResponseBody.Message)
 
     // Once new node receive welcome onboarding response from succesor, it no need to do anything else
-    
+
 }
 
 
@@ -654,10 +654,107 @@ func find_closest_preceding_node(node_id int) int{
 
 func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
     // successor check if newly join node key greater than its predeccesor id
-    if local_node.Predecessor < request.Key {
+    if  local_node.Predecessor>0 && local_node.Predecessor < request.Key {
         // update Map node and address
         config.AllNodeMap[request.Key]=request.NodeAddress
         
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
+
+        sort.Ints(config.AllNodeID)
+
+        fmt.Println("Successor's updated all node id: ",config.AllNodeID)
+
+        fmt.Println("Successor's updated all node map: ",config.AllNodeMap)
+
+        old_predecessor:=local_node.Predecessor
+
+        // update predeccesor to newly joined node
+        local_node.Predecessor=request.Key
+
+        c.JSON(http.StatusOK,models.NotifyResponse{
+            Message: "Welcome onboard to Chord Ring",
+        })
+
+        // after return response to newly join node, the successor must do something else
+        // TO DO
+        // 1. Successor request its's predeccessor to init stablization
+        // 2. Update its own finger table
+        // 3. Notify all other nodes in the system about the existence of newly joint node, by sending new node's ID and Address
+
+        // 1. SUCCESSOR REQUEST ITS PREDECESSOR TO INITIALIZE STABALIZATION
+
+        fmt.Println("old predeccesor is: ",old_predecessor)
+
+        address_predecessor:=config.AllNodeMap[old_predecessor]
+
+        fmt.Println("predeccesor's address: ",address_predecessor)
+
+        // create new reques
+        stabalization_request:=models.StablizationSuccessorRequest{
+            Message: "A new node join our network, please kick off stabalization process",
+            Key: request.Key,
+            NodeAddress: request.NodeAddress,
+        }
+
+        // prepare request
+        jsonData, err := json.Marshal(stabalization_request)
+        if err != nil {
+            fmt.Println("Error marshaling JSON:", err)
+            return 
+        }
+
+        url:=fmt.Sprintf("http://%s/start_stablization",address_predecessor)
+
+        
+        // Create a new request
+        new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+        if err != nil {
+            fmt.Println("Error creating request:", err)
+            return
+        }
+
+         // Send the request using the http.Client
+        client := &http.Client{}
+        response, err := client.Do(new_req)
+        if err != nil {
+            fmt.Println("Error making POST request", err)
+            return 
+        }
+        defer response.Body.Close()
+
+        // Check the response status code
+        if response.StatusCode != http.StatusOK {
+            fmt.Println("Error: received non-200 response status:", response.Status)
+            return 
+        }
+
+        // Read and print the response body
+        var responseBody models.StablizationSuccessorResponse
+        if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+            fmt.Println("Error decoding response body for stablization", err)
+            return 
+        }
+
+        fmt.Println("Response from predeccesor:", responseBody)
+
+        fmt.Println("My predeccesor already notify newly joint node")
+
+        // AT THIS POINT, ALL NODES ALREADY HAVE CORRECT POINTERS TO SUCCESSORS AND PREDECCORS
+        // HOWEVER, N-2 NODES ARE NOT AWARE OF THE EXISTENCE OF NEW NODE YET, HENCE I NEED TO SEND UPDATED ALL NODE MAP TO MALL 
+
+        // 2. UPDATE MY OWN FINGER TABLE
+        
+        
+        // 3. Notify all other nodes in the system about the existence of newly joint node, by sending new node's ID and Address
+
+
+
+
+    } else if local_node.Predecessor==0  {
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
+    
         // update All node address
         config.AllNodeID=append(config.AllNodeID, request.Key)
 
@@ -674,27 +771,97 @@ func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
             Message: "Welcome onboard to Chord Ring",
         })
 
-        // after return response to newly join node, the successor must do something else
-        // TO DO
-
-
-    } else {
+    } else  {
         c.JSON(http.StatusBadRequest, models.NotifyResponse{
             Message: "you reached out to the wrong successor",
         })
     }
 }
 
+func HandleStartStablization(request models.StablizationSuccessorRequest,c *gin.Context){
+    my_successor:=local_node.Successor
 
-// FindSuccessor is another exported function to find the successor of a given key.
-func FindSuccessor(key string) string {
-    fmt.Printf("Finding successor for key %s...\n", key)
-    // Placeholder return value
-    return "SuccessorNode"
-}
+    // if new node id less than my succesor, i will update my succesor
+    if request.Key<my_successor && request.Key>local_node.ID {
+        local_node.Successor=request.Key
+        
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
 
-func Test_pack() {
-	fmt.Println("test package successfully !")
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
+
+        sort.Ints(config.AllNodeID)
+
+        fmt.Println("My updated all node id: ",config.AllNodeID)
+
+        fmt.Println("My updated all node map: ",config.AllNodeMap)
+
+        // predeccesor notify new join node
+
+        fmt.Println("Predecessor notify newly joint node so the new node can update its predeccesor pointer")
+        // / create new payload
+        notify_request:=models.NotifyRequest{
+            Key: local_node.ID,
+            NodeAddress: local_node.Address,
+        }
+
+        // prepare request
+        jsonData, err := json.Marshal(notify_request)
+        if err != nil {
+            fmt.Println("Error marshaling JSON:", err)
+            return 
+        }
+
+        url:=fmt.Sprintf("http://%s/notify",request.NodeAddress)
+
+        // Create a new request
+        new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+        if err != nil {
+            fmt.Println("Error creating request:", err)
+            return
+        }
+
+        // Send the request using the http.Client
+        client := &http.Client{}
+        response, err := client.Do(new_req)
+        if err != nil {
+            fmt.Println("Error making POST request", err)
+            return 
+        }
+        defer response.Body.Close()
+
+        // Check the response status code
+        if response.StatusCode != http.StatusOK {
+            fmt.Println("Error: received non-200 response status:", response.Status)
+            return 
+        }
+
+        // Read and print the response body
+        var newResponseBody models.NotifyResponse
+        if err := json.NewDecoder(response.Body).Decode(&newResponseBody); err != nil {
+            fmt.Println("Error decoding response body", err)
+            return 
+        }
+
+        fmt.Println("Response from server: ", newResponseBody.Message)
+
+        c.JSON(http.StatusOK,models.StablizationSuccessorResponse{
+            Message: "Complete local stabalization",
+        })
+    
+    } else {
+        c.JSON(http.StatusBadRequest, models.StablizationSuccessorResponse{
+            Message: "you reached out to the wrong successor",
+        })
+    }
+
+    
+    
+
+
+
+
 }
 
 

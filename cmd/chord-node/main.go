@@ -18,7 +18,6 @@ import (
 func main() {
     color.Green("This is green text!")
     logrus.Info("This is a log message using Logrus")
-    chord.Test_pack()
 
     // Compute my own hash digest and send to all other nodes in the system
     // the init chord ring structure function is only applicable to all nodes in initial network 
