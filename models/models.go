@@ -1,66 +1,72 @@
 package models
 
 type User struct {
-    ID   string `json:"id"`
-    Name string `json:"name"`
-    Age  int    `json:"age"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Age  int    `json:"age"`
 }
 
 // Define a struct that matches the JSON structure
 type ResponseNodeIdentifier struct {
-    Data int `json:"data"`
+	Data int `json:"data"`
 }
 
 // Request struct to bind the incoming JSON
 type FindSuccessorRequest struct {
-    Key  int `json:"key" binding:"required"`
+	Key int `json:"key" binding:"required"`
 }
 
 // Response struct to format the response JSON
 type FindSuccessorErrorResponse struct {
-    Message string `json:"message"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
 }
 
 // Response struct to format the response JSON
 type FindSuccessorSuccessResponse struct {
-    Successor int `json:"successor"`
-    Message   string  `json:"message,omitempty"`
+	Successor int    `json:"successor"`
+	Message   string `json:"message,omitempty"`
 }
 
 type StoreDataRequest struct {
-    Data  string `json:"data" binding:"required"`
+	Data string `json:"data" binding:"required"`
 }
 
 // Response struct to format the response JSON
 type StoreDataResponsee struct {
-    Message string `json:"message"`
-    Key int `json:"key,omitempty"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Key     int    `json:"key,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // Response struct to format the response JSON
 type InternalStoreDataRequest struct {
-    Message string `json:"message"`
-    Key int `json:"key,omitempty"`
-    Data string  `json:"data,omitempty"`
+	Message string `json:"message"`
+	Key     int    `json:"key,omitempty"`
+	Data    string `json:"data,omitempty"`
 }
 
 // Response struct to format the response JSON
 type InternalStoreDataResponse struct {
-    Message string `json:"message"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
 }
 
-
 type RetrieveDataResponse struct {
-    Message string `json:"message"`
-    Data string  `json:"data,omitempty"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Data    string `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 type InternalRetrieveDataResponse struct {
-    Message string `json:"message"`
-    Data string `json:"data,omitempty"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Data    string `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+type LeaveRingMessage struct {
+	DepartingNodeID int
+	Keys            map[int]string
+	NewSuccessor    int // last node in departing node's successor list to be added to target node's successor list
+	NewPredecessor  int // departing node's predecessor
 }

@@ -103,6 +103,11 @@ func find_successor_for_fingertable_entry(entry_index int) int {
 	return config.AllNodeID[found_index]
 }
 
+// function to update finger table; used in stabilize function
+func fixFingerTable() {
+	// TODO
+}
+
 // Populates successor list with size log(N)
 func PopulateSuccessorList() {
 	numOfNodes := len(config.AllNodeID)
@@ -136,11 +141,43 @@ func getSuccessorList() []int {
 	return local_node.SuccessorList
 }
 
+// function to update successor list; used in stabilize function
 func updateSuccessorList() {
 	local_node.RWLock.Lock()
 	defer local_node.RWLock.Unlock()
 
+	// TODO: reconcile successor list with successor
+}
+
+// safely appends new successor id to successor list
+func addToSuccessorList(nodeId int) {
+	local_node.RWLock.Lock()
+	defer local_node.RWLock.Unlock()
+
+	local_node.SuccessorList = append(local_node.SuccessorList, nodeId)
+}
+
+// safely replaces successor list with a new one that excludes deleted node id
+func deleteFromSuccessorList(nodeId int) {
+	local_node.RWLock.Lock()
+	defer local_node.RWLock.Unlock()
+
+	newSuccessorList := []int{}
+	for _, id := range local_node.SuccessorList {
+		if id != nodeId {
+			newSuccessorList = append(newSuccessorList, id)
+		}
+	}
+
+	// update old successor list with a new one
+	local_node.SuccessorList = newSuccessorList
+}
+
+// function called in periodic intervals (?) to maintain consistency
+func stabilize() {
 	// TODO
+	updateSuccessorList()
+	fixFingerTable()
 }
 
 // InRange checks if a target ID is in the range (start, end) on the Chord ring.
