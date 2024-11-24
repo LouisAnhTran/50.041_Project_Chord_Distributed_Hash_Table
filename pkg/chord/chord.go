@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
@@ -15,11 +17,142 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// JoinNetwork is an exported function (capitalized) that allows a node to join the network.
-func JoinNetwork(nodeID string) {
-    fmt.Printf("Node %s is joining the network.\n", nodeID)
+// This funcion is called by a newly joined node
+func NewNodeJoinNetwork() {
+    // Algorithm for new node joing network - say node 11
+    // 1. Select a random node and run find_succesor function based on node 11's ID, let say Successor is Ns
+    // 2. Node 11 sets its successor=Ns and notify Ns about it existence by calling function notify
+    // 3. Node 11's Succesor run stablization function, and request its successor to execute stabalization function as well
+
+
+    // 1. FIND SUCCESSOR FOR NEWLY JOINED NODE
+    // Seed the random number generator with the current time
+    rand.Seed(time.Now().UnixNano())
+
+    // Generate a random number between 1 and 10
+    randomNumber := rand.Intn(len(config.NodeAddresses)) 
+
+    random_node_to_send_request:=config.NodeAddresses[randomNumber]
+
+    fmt.Println("random node to send find successor request: ",random_node_to_send_request)
+
+    fmt.Println("new node id: ",HashToRange(os.Getenv("NODE_ADDRESS")))
+    
+    newly_join_node_id:=HashToRange(os.Getenv("NODE_ADDRESS"))
+
+    // find succesor for this newly joint node's  id
+    // we need to find the successor for this key first
+    // create new reques
+    find_successor_request:=models.FindSuccessorRequest{
+        Key: newly_join_node_id,
+    }
+
+    // prepare request
+    jsonData, err := json.Marshal(find_successor_request)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        return 
+    }
+
+    url:=fmt.Sprintf("http://%s/find_successor",random_node_to_send_request)
+
+     // Create a new request
+    new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        return
+    }
+
+    // Send the request using the http.Client
+    client := &http.Client{}
+    response, err := client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request", err)
+        return 
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        return 
+    }
+
+    // Read and print the response body
+    var responseBody models.FindSuccessorSuccessResponse
+    if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+        fmt.Println("Error decoding response body", err)
+        return 
+    }
+
+    fmt.Println("Response from server:", responseBody)
+
+    newly_join_node_successor_id:=responseBody.Successor
+    fmt.Println("id of succesor node: ",newly_join_node_successor_id)
+
+
+    successor_address_derived_from_id:=find_node_address_matching_id(newly_join_node_successor_id)
+
+
+    fmt.Println("address of newly joined node's succesor node: ",successor_address_derived_from_id)
+
+
+    // 2. SET NEWLY JOINT NODE SUCCESSOR
+    local_node.Successor=newly_join_node_successor_id
+
+    // 3. NEWLY JOINT NODE NOTIFY ITS SUCCESSOR
+    // / create new payload
+    notify_request:=models.NotifyRequest{
+        Key: newly_join_node_id,
+        NodeAddress: os.Getenv("NODE_ADDRESS"),
+    }
+
+    // prepare request
+    jsonData, err = json.Marshal(notify_request)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        return 
+    }
+
+    url=fmt.Sprintf("http://%s/notify",successor_address_derived_from_id)
+
+     // Create a new request
+    new_req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        return
+    }
+
+    // Send the request using the http.Client
+    client = &http.Client{}
+    response, err = client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request", err)
+        return 
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        return 
+    }
+
+    // Read and print the response body
+    var newResponseBody models.NotifyResponse
+    if err := json.NewDecoder(response.Body).Decode(&newResponseBody); err != nil {
+        fmt.Println("Error decoding response body", err)
+        return 
+    }
+
+    fmt.Println("Response from server: ", newResponseBody.Message)
+
+    // Once new node receive welcome onboarding response from succesor, it no need to do anything else
+    
 }
 
+
+// This function is called once by all nodes in initial network to construct a Chord ring system
 func InitChordRingStructure(){
     // go routine sleep for 3 seconds, giving sufficient time for all nodes to set up routes
     time.Sleep(3 * time.Second) // Pauses for 2 seconds
@@ -519,6 +652,39 @@ func find_closest_preceding_node(node_id int) int{
     return local_node.Successor
 }
 
+func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
+    // successor check if newly join node key greater than its predeccesor id
+    if local_node.Predecessor < request.Key {
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
+        
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
+
+        sort.Ints(config.AllNodeID)
+
+        fmt.Println("Successor's updated all node id: ",config.AllNodeID)
+
+        fmt.Println("Successor's updated all node map: ",config.AllNodeMap)
+
+        // update predeccesor to newly joined node
+        local_node.Predecessor=request.Key
+
+        c.JSON(http.StatusOK,models.NotifyResponse{
+            Message: "Welcome onboard to Chord Ring",
+        })
+
+        // after return response to newly join node, the successor must do something else
+        // TO DO
+
+
+    } else {
+        c.JSON(http.StatusBadRequest, models.NotifyResponse{
+            Message: "you reached out to the wrong successor",
+        })
+    }
+}
+
 
 // FindSuccessor is another exported function to find the successor of a given key.
 func FindSuccessor(key string) string {
@@ -530,3 +696,5 @@ func FindSuccessor(key string) string {
 func Test_pack() {
 	fmt.Println("test package successfully !")
 }
+
+

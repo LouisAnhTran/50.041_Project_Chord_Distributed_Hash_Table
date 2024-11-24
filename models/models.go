@@ -64,3 +64,14 @@ type InternalRetrieveDataResponse struct {
     Data string `json:"data,omitempty"`
     Error   string  `json:"error,omitempty"`
 }
+
+type NotifyRequest struct {
+    Key int `json:"key"`
+    NodeAddress string `json:"node_address"`
+}
+
+
+type NotifyResponse struct {
+    Message string `json:"message"`
+    Error   string  `json:"error,omitempty"`
+}

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  node11:
+    build: .
+    container_name: chord-node11
+    environment:
+      - NODE_ID=1
+      - NODE_ADDRESS=node11:8080
+    networks:
+      - chord-network
+    ports:
+      - "8091:8080"  # Expose node1 on localhost:8080
+
+networks:
+  chord-network:
+    driver: bridge

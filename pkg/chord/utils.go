@@ -122,3 +122,12 @@ func InRange(target, start, end string) bool {
     // Wraparound case (end < start)
     return targetInt.Cmp(startInt) > 0 || targetInt.Cmp(endInt) <= 0
 }
+
+func find_node_address_matching_id(node_id int) string {
+    for _,node_addr := range config.NodeAddresses {
+        if HashToRange(node_addr) ==  node_id {
+            return node_addr
+        }
+    }
+    return "NOT VALID"
+}

@@ -20,7 +20,29 @@ func SetupRoutes(router *gin.Engine) {
     router.POST("/internal_store_data",internal_store_data)
     router.GET("/retrieve_data/:id",retrieve_data)
     router.GET("/internal_retrieve_data/:id",internal_retrieve_data)
+    router.POST("/notify",notify)
+
 }
+
+func notify(c *gin.Context){
+    // to do
+    var req models.NotifyRequest
+
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.NotifyResponse{
+            Message: "Invalid request",
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    fmt.Println("newly join node key: ",req.Key)
+    fmt.Println("newly join node address: ",req.NodeAddress)
+
+    chord.HandleSuccessorNotification(req,c)
+}
+
 
 func retrieve_data(c *gin.Context){
     // to do

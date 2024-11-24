@@ -2,14 +2,17 @@ package main
 
 import (
 	// "fmt"
-    // "os"
+	// "os"
+	"os"
+	"time"
+
+	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/internal/routes"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/pkg/chord"
 	"github.com/fatih/color"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-    "github.com/gin-contrib/cors" 
-    "time"
 )
 
 func main() {
@@ -18,7 +21,16 @@ func main() {
     chord.Test_pack()
 
     // Compute my own hash digest and send to all other nodes in the system
-    go chord.InitChordRingStructure()
+    // the init chord ring structure function is only applicable to all nodes in initial network 
+    my_address:=os.Getenv("NODE_ADDRESS")
+
+    if my_address!=config.NewJoinNodeAddress {
+        // if i am not a newly joined node, then i will join ring construction process
+        go chord.InitChordRingStructure()
+    } else {
+        // I am not newly joint node, I will need to do a few steps to join the network
+        go chord.NewNodeJoinNetwork()
+    }
 
 
     // Set up routes
