@@ -521,8 +521,17 @@ func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
 	if message.DepartingNodeID == local_node.Successor {
 		// remove departing node (successor) from successor list
 		deleteFromSuccessorList(message.DepartingNodeID)
-		// add new successor to the list
+		// add new successor (last node in departing node's SuccessorList) to the list
 		addToSuccessorList(message.NewSuccessor)
+		// update AllNodeID and AllNodeMap by deleting the respective entries
+		deleteNodeEntry(message.DepartingNodeID)
+
+		// set new successor
+		newSuccessor := local_node.SuccessorList[0]
+		local_node.Successor = newSuccessor
+
+		// call stabilization function
+		stabilize(config.AllNodeID, config.AllNodeMap)
 	}
 }
 

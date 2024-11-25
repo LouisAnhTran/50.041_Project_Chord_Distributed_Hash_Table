@@ -146,7 +146,8 @@ func updateSuccessorList() {
 	local_node.RWLock.Lock()
 	defer local_node.RWLock.Unlock()
 
-	// TODO: reconcile successor list with successor
+	// TODO: reconcile successor list with successor and prepend successor to list
+	// Note: this is useless for node voluntary leave case
 }
 
 // safely appends new successor id to successor list
@@ -157,27 +158,41 @@ func addToSuccessorList(nodeId int) {
 	local_node.SuccessorList = append(local_node.SuccessorList, nodeId)
 }
 
-// safely replaces successor list with a new one that excludes deleted node id
+// safely modifies successor list that excludes deleted node id
 func deleteFromSuccessorList(nodeId int) {
 	local_node.RWLock.Lock()
 	defer local_node.RWLock.Unlock()
 
-	newSuccessorList := []int{}
-	for _, id := range local_node.SuccessorList {
-		if id != nodeId {
-			newSuccessorList = append(newSuccessorList, id)
+	for i, id := range local_node.SuccessorList {
+		if id == nodeId {
+			local_node.SuccessorList = append(local_node.SuccessorList[:i], local_node.SuccessorList[i+1:]...)
+			break
+		}
+	}
+}
+
+// safely deletes node from global node list (AllNodeID & AllNodeMap)
+func deleteNodeEntry(nodeId int) {
+	local_node.RWLock.Lock()
+	defer local_node.RWLock.Unlock()
+
+	// delete from AllNodeID list
+	for i, id := range config.AllNodeID {
+		if id == nodeId {
+			config.AllNodeID = append(config.AllNodeID[:i], config.AllNodeID[i+1:]...)
 		}
 	}
 
-	// update old successor list with a new one
-	local_node.SuccessorList = newSuccessorList
+	// delete from AllNodeMap map
+	delete(config.AllNodeMap, nodeId)
 }
 
-// function called in periodic intervals (?) to maintain consistency
-func stabilize() {
+// function called after node leave/join to maintain consistency across all nodes
+func stabilize(allNodeID []int, allNodeMap map[int]string) {
 	// TODO
 	updateSuccessorList()
 	fixFingerTable()
+	// propagate updated AllNodeID and AllNodeMap through successors
 }
 
 // InRange checks if a target ID is in the range (start, end) on the Chord ring.
