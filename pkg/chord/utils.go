@@ -147,7 +147,7 @@ func updateSuccessorList() {
 	defer local_node.RWLock.Unlock()
 
 	// TODO: reconcile successor list with successor and prepend successor to list
-	// Note: this is useless for node voluntary leave case
+	// Note: this is useless for node voluntary leave case (for current design)
 }
 
 // safely appends new successor id to successor list

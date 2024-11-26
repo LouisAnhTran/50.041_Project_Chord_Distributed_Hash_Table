@@ -536,7 +536,47 @@ func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
 }
 
 func HandleNodeInvoluntaryLeave() {
-	// TODO
+	for _, id := range local_node.SuccessorList {
+		addr := config.AllNodeMap[id]
+		client := &http.Client{Timeout: 3 * time.Second} // timeout for request
+		// call health check on each node
+		url := fmt.Sprintf("http://%s/health_check", addr)
+		resp, err := client.Get(url)
+
+		if err != nil {
+			log.Fatalf("Node %d (%s) is unresponsive: %v\n", id, addr, err)
+			continue
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			// Decode JSON response into a map
+			var body map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				log.Fatalf("Node %d (%s): failed to decode response body: %v\n", id, addr, err)
+				continue
+			}
+
+			// Check the "message" field
+			if message, ok := body["message"].(string); ok && message == "good health" {
+				fmt.Printf("Node %d (%s) is healthy.\n", id, addr)
+				// set this live node as new successor
+				local_node.Successor = id
+				// call stabilize
+				stabilize(config.AllNodeID, config.AllNodeMap)
+				break
+			} else {
+				fmt.Printf("Node %d (%s) returned unexpected message: %v\n", id, addr, body)
+			}
+		} else {
+			fmt.Printf("Node %d (%s) returned unhealthy status: %d\n", id, addr, resp.StatusCode)
+		}
+	}
+
+	// TODO:
+	// Modified closest_preceding_node (in fig 5) searches not only the finger table but also the successor list for the most immediate predecessor of id.
+	// If a node fails during the find_successor, the lookup proceeds, after a timeout, by trying the next best predecessor (of key k) among the nodes in the finger table and the successor list (only choose from finger table if no node better precedes successor list's best predecessor than from finger table's).
 }
 
 func find_closest_preceding_node(node_id int) int {
