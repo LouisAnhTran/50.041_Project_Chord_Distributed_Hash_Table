@@ -403,80 +403,6 @@ func HandleFindSuccessor(req models.FindSuccessorRequest,c *gin.Context)  {
 
 }
 
-func send_request_to_successor_for_storing_data(node_address string,data_to_be_store string,data_identifier int,c *gin.Context) {
-    url:=fmt.Sprintf("http://%s/internal_store_data",node_address)
-
-    // prepare request
-    internal_store_data_request:=models.InternalStoreDataRequest{
-        Data: data_to_be_store,
-        Key: data_identifier,
-    }
-
-    jsonData, err := json.Marshal(internal_store_data_request)
-    if err != nil {
-        fmt.Println("Error marshaling JSON:", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error - Error marshaling JSON",
-            Error:   err.Error(),
-        })
-        return 
-    }
-
-    // Create a new request
-    new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-    if err != nil {
-        fmt.Println("Error creating request:", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error - Error creating request",
-            Error:   err.Error(),
-        })
-        return
-    }
-
-    // Send the request using the http.Client
-    client := &http.Client{}
-    response, err := client.Do(new_req)
-    if err != nil {
-        fmt.Println("Error making POST request", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error - Error making POST request",
-            Error:   err.Error(),
-        })
-        return 
-    }
-    defer response.Body.Close()
- 
-    // Check the response status code
-    if response.StatusCode != http.StatusOK {
-        fmt.Println("Error: received non-200 response status:", response.Status)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-             Message: "Server error",
-        })
-        return 
-    }
- 
-     // Read and print the response body
-    var responseBody models.InternalStoreDataResponse 
-    if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
-        fmt.Println("Error decoding response body", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-             Message: "Server error - Error decoding response body",
-             Error:   err.Error(),
-        })
-        return 
-    }
-    
-    fmt.Println("Response from server:", responseBody)
-
-
-    c.JSON(http.StatusOK,models.StoreDataResponsee{
-        Message: responseBody.Message,
-        Key: data_identifier,
-    })
-
-}
-
-
 func HandleInternalStoreData(request models.InternalStoreDataRequest,c *gin.Context) {
     // simply store data to to this machine
     local_node.Data[request.Key]=request.Data
@@ -571,55 +497,6 @@ func HandleRetrieveData(key int,c *gin.Context){
     send_request_to_successor_for_retrieving_data(node_to_retrieve_data_address,key,c)
 }
 
-func send_request_to_successor_for_retrieving_data(node_address string,data_identifier int,c *gin.Context) {
-    fmt.Println("create ")
-    url:=fmt.Sprintf("http://%s/internal_retrieve_data/%d",node_address,data_identifier)
-
-    resp,err :=  http.Get(url)
-    
-    if err != nil {
-        log.Fatalf("Failed to send request to %s: %v",node_address,err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error ",
-            Error:   err.Error(),
-        })
-        return
-    }
-
-    // Read and print the response
-    body, err := ioutil.ReadAll(resp.Body)
-    if err != nil {
-        log.Fatalf("Failed to read response: %v", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error",
-            Error:   err.Error(),
-        })
-        return
-    }
-
-    fmt.Printf("Response from %s: %s \n",node_address,string(body))
-
-    // Unmarshal JSON into the Response struct
-    var response models.InternalRetrieveDataResponse
-
-    if err := json.Unmarshal(body, &response); err != nil {
-        log.Fatalf("Failed to parse JSON: %v", err)
-        c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-            Message: "Server error",
-            Error:   err.Error(),
-        })
-        return
-    }
-
-    // Now we can access the Data field directly
-    fmt.Println("Response from ",node_address,": ",response)
-    
-    c.JSON(http.StatusOK,models.InternalRetrieveDataResponse{
-        Message: response.Message,
-        Data: response.Data,
-    })
-
-}
 
 func HandleInternalRetrieveData(key int,c *gin.Context) {
     value,exists:=local_node.Data[key]
@@ -640,17 +517,7 @@ func HandleInternalRetrieveData(key int,c *gin.Context) {
     
 }
 
-func find_closest_preceding_node(node_id int) int{
-    for i:=len(local_node.FingerTable)-1;i>=0;i-- {
-        for k,v := range local_node.FingerTable[i] {
-            fmt.Println("k is: ",k," v: ",v)
-            if v < node_id {
-                return v
-            }
-        }
-    }
-    return local_node.Successor
-}
+
 
 func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
     // successor check if newly join node key greater than its predeccesor id
