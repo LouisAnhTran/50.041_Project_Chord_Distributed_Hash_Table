@@ -22,8 +22,25 @@ func SetupRoutes(router *gin.Engine) {
     router.GET("/internal_retrieve_data/:id",internal_retrieve_data)
     router.POST("/notify",notify)
     router.POST("/start_stablization",start_stablization)
+    router.POST("/update_metadata",update_metadata)
+}
 
+func update_metadata(c *gin.Context) {
+    // to do
+    var req models.UpdateMetadataUponNewNodeJoinRequest
 
+    // Bind JSON data to the request struct
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.UpdateMetadataUponNewNodeJoinResponse{
+            Error:   err.Error(),
+        })
+        return
+    }
+
+    fmt.Println("Update metadata - joining node's succesor sent joining node's key: ",req.Key)
+    fmt.Println("Update metadata - joining node's succesor sent joining node's address: ",req.NodeAddress)
+
+    chord.HandleUpdateMetaData(req,c)
 }
 
 func start_stablization(c *gin.Context){
@@ -40,8 +57,8 @@ func start_stablization(c *gin.Context){
     }
 
     fmt.Println("message from succesor: ",req.Message)
-    fmt.Println("succesor send new node id: ",req.Key)
-    fmt.Println("succesor send new node address: ",req.NodeAddress)
+    fmt.Println("succesor sent joining node's key: ",req.Key)
+    fmt.Println("succesor sent joining node's address: ",req.NodeAddress)
 
 
     chord.HandleStartStablization(req,c)
@@ -61,8 +78,8 @@ func notify(c *gin.Context){
         return
     }
 
-    fmt.Println("newly join node key: ",req.Key)
-    fmt.Println("newly join node address: ",req.NodeAddress)
+    fmt.Println("successor received: joining node key: ",req.Key)
+    fmt.Println("successor received: joining node address: ",req.NodeAddress)
 
     chord.HandleSuccessorNotification(req,c)
 }

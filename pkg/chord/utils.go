@@ -75,9 +75,18 @@ func FindPredecessorForNode() int {
     return config.AllNodeID[index_node-1]
 }
 
-func PopulateFingerTable() {
-    // Initialize index to -1 to indicate not found
-   
+func PopulateFingerTable() {   
+    for i:=1;i<=config.FingerTableEntry;i++ {
+        adjusted_index := (local_node.ID + int(math.Pow(2, float64(i-1)))) % config.HashRange
+        successor:=find_successor_for_fingertable_entry(adjusted_index)
+        map_adjusted_index:=map[int]int{adjusted_index:successor}
+        local_node.FingerTable=append(local_node.FingerTable,map_adjusted_index)
+    }
+}
+
+func UpdatePopulateFingerTable() {
+    // invalidate current outdated finger table
+    local_node.FingerTable=[]map[int]int{}
 
     for i:=1;i<=config.FingerTableEntry;i++ {
         adjusted_index := (local_node.ID + int(math.Pow(2, float64(i-1)))) % config.HashRange

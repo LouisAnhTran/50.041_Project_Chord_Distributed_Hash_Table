@@ -87,3 +87,14 @@ type StablizationSuccessorResponse struct {
     Error   string  `json:"error,omitempty"`
 }
 
+type UpdateMetadataUponNewNodeJoinRequest struct {
+    Key int `json:"key"`
+    NodeAddress string `json:"node_address"`
+}
+
+
+type UpdateMetadataUponNewNodeJoinResponse struct {
+    Message string `json:"message,omitempty"`
+    Error   string  `json:"error,omitempty"`
+}
+

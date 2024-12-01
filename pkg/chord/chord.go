@@ -36,7 +36,7 @@ func NewNodeJoinNetwork() {
 
     fmt.Println("random node to send find successor request: ",random_node_to_send_request)
 
-    fmt.Println("new node id: ",HashToRange(os.Getenv("NODE_ADDRESS")))
+    fmt.Println("joining node id: ",HashToRange(os.Getenv("NODE_ADDRESS")))
     
     newly_join_node_id:=HashToRange(os.Getenv("NODE_ADDRESS"))
 
@@ -88,13 +88,13 @@ func NewNodeJoinNetwork() {
     fmt.Println("Response from server:", responseBody)
 
     newly_join_node_successor_id:=responseBody.Successor
-    fmt.Println("id of succesor node: ",newly_join_node_successor_id)
+    fmt.Println("joining node's succesor: ",newly_join_node_successor_id)
 
 
     successor_address_derived_from_id:=find_node_address_matching_id(newly_join_node_successor_id)
 
 
-    fmt.Println("address of newly joined node's succesor node: ",successor_address_derived_from_id)
+    fmt.Println("joining node's succesor address: ",successor_address_derived_from_id)
 
 
     // 2. SET NEWLY JOINT NODE SUCCESSOR
@@ -688,7 +688,7 @@ func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
 
         address_predecessor:=config.AllNodeMap[old_predecessor]
 
-        fmt.Println("predeccesor's address: ",address_predecessor)
+        fmt.Println("old predeccesor's address: ",address_predecessor)
 
         // create new reques
         stabalization_request:=models.StablizationSuccessorRequest{
@@ -740,16 +740,19 @@ func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
 
         fmt.Println("My predeccesor already notify newly joint node")
 
+        fmt.Println("At this stage, all nodes has correct S and P pointers, but AllNodeID, AllNodeMap and Finger tables are not consistent and updated")
         // AT THIS POINT, ALL NODES ALREADY HAVE CORRECT POINTERS TO SUCCESSORS AND PREDECCORS
         // HOWEVER, N-2 NODES ARE NOT AWARE OF THE EXISTENCE OF NEW NODE YET, HENCE I NEED TO SEND UPDATED ALL NODE MAP TO MALL 
 
         // 2. UPDATE MY OWN FINGER TABLE
-        
-        
+        fmt.Println("Joining's succesor is updating finger table now")
+        UpdatePopulateFingerTable()
+        fmt.Println("Joining node's Succesor updated Finger Table ",local_node.FingerTable)
+
         // 3. Notify all other nodes in the system about the existence of newly joint node, by sending new node's ID and Address
+        JoiningNodeSuccessorUpdateAllNodesInRingAboutNewNode(request.Key,request.NodeAddress)
 
-
-
+        fmt.Println("At this stage, all Nodes pointers have been corrected and all metadata are up to date")
 
     } else if local_node.Predecessor==0  {
         // update Map node and address
@@ -760,15 +763,15 @@ func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
 
         sort.Ints(config.AllNodeID)
 
-        fmt.Println("Successor's updated all node id: ",config.AllNodeID)
+        fmt.Println("Joining node's updated all node id: ",config.AllNodeID)
 
-        fmt.Println("Successor's updated all node map: ",config.AllNodeMap)
+        fmt.Println("Joining node's updated all node map: ",config.AllNodeMap)
 
         // update predeccesor to newly joined node
         local_node.Predecessor=request.Key
 
         c.JSON(http.StatusOK,models.NotifyResponse{
-            Message: "Welcome onboard to Chord Ring",
+            Message: "I am the joining node and I already joined the Ring and updated all my pointers",
         })
 
     } else  {
@@ -778,11 +781,70 @@ func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
     }
 }
 
+func JoiningNodeSuccessorUpdateAllNodesInRingAboutNewNode(new_node_key int,new_node_address string) {
+    
+    for node_key,node_address := range config.AllNodeMap {
+        if node_key != local_node.ID {
+            // create new reques
+            stabalization_request:=models.UpdateMetadataUponNewNodeJoinRequest{
+                Key: new_node_key,
+                NodeAddress: new_node_address,
+            }
+
+            // prepare request
+            jsonData, err := json.Marshal(stabalization_request)
+            if err != nil {
+                fmt.Println("Error marshaling JSON:", err)
+                return 
+            }
+
+            fmt.Println("I am sending update metadata request to Node key ",node_key," - Node address ",node_address)
+
+            url:=fmt.Sprintf("http://%s/update_metadata",node_address)
+
+
+            // Create a new request
+            new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+            if err != nil {
+                fmt.Println("Error creating request:", err)
+                return
+            }
+
+            // Send the request using the http.Client
+            client := &http.Client{}
+            response, err := client.Do(new_req)
+            if err != nil {
+                fmt.Println("Error making POST request", err)
+                return 
+            }
+            defer response.Body.Close()
+
+            // Check the response status code
+            if response.StatusCode != http.StatusOK {
+                fmt.Println("Error: received non-200 response status:", response.Status)
+                return 
+            }
+
+            // Read and print the response body
+            var responseBody models.UpdateMetadataUponNewNodeJoinResponse
+            if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+                fmt.Println("Error decoding response body for stablization", err)
+                return 
+            }
+
+            fmt.Println("Response from node for update metadata request:", responseBody)
+        } 
+    }
+    
+}
+
+
 func HandleStartStablization(request models.StablizationSuccessorRequest,c *gin.Context){
     my_successor:=local_node.Successor
 
     // if new node id less than my succesor, i will update my succesor
     if request.Key<my_successor && request.Key>local_node.ID {
+        // update successor to joining node
         local_node.Successor=request.Key
         
         // update Map node and address
@@ -793,9 +855,9 @@ func HandleStartStablization(request models.StablizationSuccessorRequest,c *gin.
 
         sort.Ints(config.AllNodeID)
 
-        fmt.Println("My updated all node id: ",config.AllNodeID)
+        fmt.Println("Stabalization - My updated all node id: ",config.AllNodeID)
 
-        fmt.Println("My updated all node map: ",config.AllNodeMap)
+        fmt.Println("Stabalization - My updated all node map: ",config.AllNodeMap)
 
         // predeccesor notify new join node
 
@@ -855,13 +917,27 @@ func HandleStartStablization(request models.StablizationSuccessorRequest,c *gin.
             Message: "you reached out to the wrong successor",
         })
     }
-
-    
-    
-
-
-
-
 }
 
 
+func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest,c *gin.Context){
+    // update Map node and address
+    config.AllNodeMap[request.Key]=request.NodeAddress
+    
+    // update All node address
+    config.AllNodeID=append(config.AllNodeID, request.Key)
+
+    sort.Ints(config.AllNodeID)
+
+    fmt.Println("Updated all node id upon new node joining: ",config.AllNodeID)
+
+    fmt.Println("Updated all node map upon new node joining: ",config.AllNodeMap)
+
+    // update finder table
+    UpdatePopulateFingerTable()
+    fmt.Println("Updated finger table upon new node joining: ",local_node.FingerTable)
+
+    c.JSON(http.StatusOK,models.UpdateMetadataUponNewNodeJoinResponse{
+        Message: "Successfully updated All Node Map, All Node ID and Finger table with joined node's ID and Address",
+    })
+}
