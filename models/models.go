@@ -59,41 +59,45 @@ type RetrieveDataResponse struct {
 }
 
 type InternalRetrieveDataResponse struct {
-    Message string `json:"message"`
-    Data string `json:"data,omitempty"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Data    string `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 type NotifyRequest struct {
-    Key int `json:"key"`
-    NodeAddress string `json:"node_address"`
+	Key         int    `json:"key"`
+	NodeAddress string `json:"node_address"`
 }
 
-
 type NotifyResponse struct {
-    Message string `json:"message"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
 }
 
 type StablizationSuccessorRequest struct {
-    Message string `json:"message"`
-    Key int `json:"key"`
-    NodeAddress string `json:"node_address"`
+	Message     string `json:"message"`
+	Key         int    `json:"key"`
+	NodeAddress string `json:"node_address"`
 }
 
 type StablizationSuccessorResponse struct {
-    Message string `json:"message"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
 }
 
 type UpdateMetadataUponNewNodeJoinRequest struct {
-    Key int `json:"key"`
-    NodeAddress string `json:"node_address"`
+	Key         int    `json:"key"`
+	NodeAddress string `json:"node_address"`
 }
-
 
 type UpdateMetadataUponNewNodeJoinResponse struct {
-    Message string `json:"message,omitempty"`
-    Error   string  `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
+type LeaveRingMessage struct {
+	DepartingNodeID int            `json:"departing_node_id"`
+	Keys            map[int]string `json:"keys"`
+	NewSuccessor    int            `json:"new_successor"`   // last node in departing node's successor list to be added to target node's successor list
+	NewPredecessor  int            `json:"new_predecessor"` // departing node's predecessor
+}
