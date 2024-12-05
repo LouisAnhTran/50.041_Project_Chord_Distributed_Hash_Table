@@ -20,9 +20,16 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/internal_store_data", internal_store_data)
 	router.GET("/retrieve_data/:id", retrieve_data)
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
+	router.GET("/leave", leave)
 	router.POST("/notify", notify)
 	router.POST("/start_stablization", start_stablization)
 	router.POST("/update_metadata", update_metadata)
+}
+
+func leave(c *gin.Context) {
+	var msg models.LeaveRingMessage
+	msg = *chord.GetLocalNode().NewLeaveRingMessage()
+	chord.HandleLeaveSequence(msg, c)
 }
 
 func update_metadata(c *gin.Context) {
@@ -175,10 +182,4 @@ func health_check(c *gin.Context) {
 func getNodeAddressAndIdentifier(c *gin.Context) {
 	node_identifier := chord.HashToRange(os.Getenv("NODE_ADDRESS"))
 	c.JSON(http.StatusOK, gin.H{"data": node_identifier})
-}
-
-func triggerNodeVoluntaryLeave(c *gin.Context) {
-	var msg models.LeaveRingMessage
-	// TODO: give ID, keys map, new successor (last node in SuccessorList), new predecessor
-	chord.HandleNodeVoluntaryLeave(msg, c)
 }
