@@ -27,3 +27,12 @@ type Node struct {
 	Data          map[int]string
 	RWLock        sync.RWMutex
 }
+
+func (n *Node) NewLeaveRingMessage() *LeaveRingMessage {
+	return &LeaveRingMessage{
+		DepartingNodeID: n.ID,
+		Keys: n.Data,
+		NewSuccessor: n.Successor,
+		NewPredecessor: n.Predecessor,
+	}
+}
