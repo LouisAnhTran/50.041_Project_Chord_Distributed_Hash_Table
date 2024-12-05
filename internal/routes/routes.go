@@ -13,18 +13,28 @@ import (
 
 // SetupRoutes initializes the API routes
 func SetupRoutes(router *gin.Engine) {
-	router.GET("/node_identifier", getNodeAddressAndIdentifier)
-	router.GET("/health_check", health_check)
-	router.POST("/find_successor", find_successor)
-	router.POST("/store_data", store_data)
-	router.POST("/internal_store_data", internal_store_data)
-	router.GET("/retrieve_data/:id", retrieve_data)
-	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
+    router.GET("/node_identifier",getNodeAddressAndIdentifier)
+    router.GET("/health_check",health_check)
+    router.POST("/find_successor",find_successor)
+    router.POST("/store_data",store_data)
+    router.POST("/internal_store_data",internal_store_data)
+    router.GET("/retrieve_data/:id",retrieve_data)
+    router.GET("/internal_retrieve_data/:id",internal_retrieve_data)
+    router.GET("/leave", leave)
+	router.POST("/notify_leave")
+    router.POST("/notify",notify)
+    router.POST("/start_stablization",start_stablization)
+    router.POST("/update_metadata",update_metadata)
 }
 
-func retrieve_data(c *gin.Context) {
-	// to do
-	key_str := c.Param("id")
+func leave(c *gin.Context) {
+	var msg models.LeaveRingMessage
+	msg = local_node.NewLeaveRingMessage()
+}
+
+func update_metadata(c *gin.Context) {
+    // to do
+    var req models.UpdateMetadataUponNewNodeJoinRequest
 
 	key, err := strconv.Atoi(key_str)
 	if err != nil {
