@@ -791,6 +791,10 @@ func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest, c
 	})
 }
 
+func HandleLeaveSequence(msg models.LeaveRingMessage, c *gin.Context) {
+	// TODO: Send HTTP request to notify_leave routes for predecessor and successor nodes.
+}
+
 func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
 	if message.DepartingNodeID == local_node.Predecessor {
 		// store departing node's (predecessor) keys
