@@ -4,6 +4,8 @@ import (
 	// "fmt"
 	"os"
 	"sync"
+
+	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
 )
 
 var local_node = &Node{
@@ -28,11 +30,11 @@ type Node struct {
 	RWLock        sync.RWMutex
 }
 
-func (n *Node) NewLeaveRingMessage() *LeaveRingMessage {
-	return &LeaveRingMessage{
+func (n *Node) NewLeaveRingMessage() *models.LeaveRingMessage {
+	return &models.LeaveRingMessage{
 		DepartingNodeID: n.ID,
-		Keys: n.Data,
-		NewSuccessor: n.Successor,
-		NewPredecessor: n.Predecessor,
+		Keys:            n.Data,
+		NewSuccessor:    n.Successor,
+		NewPredecessor:  n.Predecessor,
 	}
 }
