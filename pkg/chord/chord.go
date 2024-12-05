@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
@@ -15,14 +17,145 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// JoinNetwork is an exported function (capitalized) that allows a node to join the network.
-func JoinNetwork(nodeID string) {
-	fmt.Printf("Node %s is joining the network.\n", nodeID)
+// This funcion is called by a newly joined node
+func NewNodeJoinNetwork() {
+    // Algorithm for new node joing network - say node 11
+    // 1. Select a random node and run find_succesor function based on node 11's ID, let say Successor is Ns
+    // 2. Node 11 sets its successor=Ns and notify Ns about it existence by calling function notify
+    // 3. Node 11's Succesor run stablization function, and request its successor to execute stabalization function as well
+
+
+    // 1. FIND SUCCESSOR FOR NEWLY JOINED NODE
+    // Seed the random number generator with the current time
+    rand.Seed(time.Now().UnixNano())
+
+    // Generate a random number between 1 and 10
+    randomNumber := rand.Intn(len(config.NodeAddresses)) 
+
+    random_node_to_send_request:=config.NodeAddresses[randomNumber]
+
+    fmt.Println("random node to send find successor request: ",random_node_to_send_request)
+
+    fmt.Println("joining node id: ",HashToRange(os.Getenv("NODE_ADDRESS")))
+    
+    newly_join_node_id:=HashToRange(os.Getenv("NODE_ADDRESS"))
+
+    // find succesor for this newly joint node's  id
+    // we need to find the successor for this key first
+    // create new reques
+    find_successor_request:=models.FindSuccessorRequest{
+        Key: newly_join_node_id,
+    }
+
+    // prepare request
+    jsonData, err := json.Marshal(find_successor_request)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        return 
+    }
+
+    url:=fmt.Sprintf("http://%s/find_successor",random_node_to_send_request)
+
+     // Create a new request
+    new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        return
+    }
+
+    // Send the request using the http.Client
+    client := &http.Client{}
+    response, err := client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request", err)
+        return 
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        return 
+    }
+
+    // Read and print the response body
+    var responseBody models.FindSuccessorSuccessResponse
+    if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+        fmt.Println("Error decoding response body", err)
+        return 
+    }
+
+    fmt.Println("Response from server:", responseBody)
+
+    newly_join_node_successor_id:=responseBody.Successor
+    fmt.Println("joining node's succesor: ",newly_join_node_successor_id)
+
+
+    successor_address_derived_from_id:=find_node_address_matching_id(newly_join_node_successor_id)
+
+
+    fmt.Println("joining node's succesor address: ",successor_address_derived_from_id)
+
+
+    // 2. SET NEWLY JOINT NODE SUCCESSOR
+    local_node.Successor=newly_join_node_successor_id
+
+    // 3. NEWLY JOINT NODE NOTIFY ITS SUCCESSOR
+    // / create new payload
+    notify_request:=models.NotifyRequest{
+        Key: newly_join_node_id,
+        NodeAddress: os.Getenv("NODE_ADDRESS"),
+    }
+
+    // prepare request
+    jsonData, err = json.Marshal(notify_request)
+    if err != nil {
+        fmt.Println("Error marshaling JSON:", err)
+        return 
+    }
+
+    url=fmt.Sprintf("http://%s/notify",successor_address_derived_from_id)
+
+     // Create a new request
+    new_req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+    if err != nil {
+        fmt.Println("Error creating request:", err)
+        return
+    }
+
+    // Send the request using the http.Client
+    client = &http.Client{}
+    response, err = client.Do(new_req)
+    if err != nil {
+        fmt.Println("Error making POST request", err)
+        return 
+    }
+    defer response.Body.Close()
+
+    // Check the response status code
+    if response.StatusCode != http.StatusOK {
+        fmt.Println("Error: received non-200 response status:", response.Status)
+        return 
+    }
+
+    // Read and print the response body
+    var newResponseBody models.NotifyResponse
+    if err := json.NewDecoder(response.Body).Decode(&newResponseBody); err != nil {
+        fmt.Println("Error decoding response body", err)
+        return 
+    }
+
+    fmt.Println("Response from server: ", newResponseBody.Message)
+
+    // Once new node receive welcome onboarding response from succesor, it no need to do anything else
+
 }
 
-func InitChordRingStructure() {
-	// go routine sleep for 3 seconds, giving sufficient time for all nodes to set up routes
-	time.Sleep(3 * time.Second) // Pauses for 2 seconds
+
+// This function is called once by all nodes in initial network to construct a Chord ring system
+func InitChordRingStructure(){
+    // go routine sleep for 3 seconds, giving sufficient time for all nodes to set up routes
+    time.Sleep(3 * time.Second) // Pauses for 2 seconds
 
 	for i := range config.NodeAddresses {
 		node_address := config.NodeAddresses[i]
@@ -268,85 +401,9 @@ func HandleFindSuccessor(req models.FindSuccessorRequest, c *gin.Context) {
 
 }
 
-func send_request_to_successor_for_storing_data(node_address string, data_to_be_store string, data_identifier int, c *gin.Context) {
-	url := fmt.Sprintf("http://%s/internal_store_data", node_address)
-
-	// prepare request
-	internal_store_data_request := models.InternalStoreDataRequest{
-		Data: data_to_be_store,
-		Key:  data_identifier,
-	}
-
-	jsonData, err := json.Marshal(internal_store_data_request)
-	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error - Error marshaling JSON",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	// Create a new request
-	new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error - Error creating request",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	// Send the request using the http.Client
-	client := &http.Client{}
-	response, err := client.Do(new_req)
-	if err != nil {
-		fmt.Println("Error making POST request", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error - Error making POST request",
-			Error:   err.Error(),
-		})
-		return
-	}
-	defer response.Body.Close()
-
-	// Check the response status code
-	if response.StatusCode != http.StatusOK {
-		fmt.Println("Error: received non-200 response status:", response.Status)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error",
-		})
-		return
-	}
-
-	// Read and print the response body
-	var responseBody models.InternalStoreDataResponse
-	if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
-		fmt.Println("Error decoding response body", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error - Error decoding response body",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	fmt.Println("Response from server:", responseBody)
-
-	c.JSON(http.StatusOK, models.StoreDataResponsee{
-		Message: responseBody.Message,
-		Key:     data_identifier,
-	})
-
-}
-
-func HandleInternalStoreData(request models.InternalStoreDataRequest, c *gin.Context) {
-	// simply store data to to this machine
-	local_node.Data[request.Key] = request.Data
-
-	// machine data storage after storing the data
-	fmt.Println("hash table after storing key-value pair: ", local_node.Data)
-	fmt.Println()
+func HandleInternalStoreData(request models.InternalStoreDataRequest,c *gin.Context) {
+    // simply store data to to this machine
+    local_node.Data[request.Key]=request.Data
 
 	c.JSON(http.StatusOK, models.InternalStoreDataResponse{
 		Message: "Stored data successfully",
@@ -434,55 +491,6 @@ func HandleRetrieveData(key int, c *gin.Context) {
 	send_request_to_successor_for_retrieving_data(node_to_retrieve_data_address, key, c)
 }
 
-func send_request_to_successor_for_retrieving_data(node_address string, data_identifier int, c *gin.Context) {
-	fmt.Println("create ")
-	url := fmt.Sprintf("http://%s/internal_retrieve_data/%d", node_address, data_identifier)
-
-	resp, err := http.Get(url)
-
-	if err != nil {
-		log.Fatalf("Failed to send request to %s: %v", node_address, err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error ",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	// Read and print the response
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Failed to read response: %v", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	fmt.Printf("Response from %s: %s \n", node_address, string(body))
-
-	// Unmarshal JSON into the Response struct
-	var response models.InternalRetrieveDataResponse
-
-	if err := json.Unmarshal(body, &response); err != nil {
-		log.Fatalf("Failed to parse JSON: %v", err)
-		c.JSON(http.StatusInternalServerError, models.FindSuccessorErrorResponse{
-			Message: "Server error",
-			Error:   err.Error(),
-		})
-		return
-	}
-
-	// Now we can access the Data field directly
-	fmt.Println("Response from ", node_address, ": ", response)
-
-	c.JSON(http.StatusOK, models.InternalRetrieveDataResponse{
-		Message: response.Message,
-		Data:    response.Data,
-	})
-
-}
 
 func HandleInternalRetrieveData(key int, c *gin.Context) {
 	value, exists := local_node.Data[key]
@@ -503,36 +511,192 @@ func HandleInternalRetrieveData(key int, c *gin.Context) {
 
 }
 
-// functions for handling node leave
-// message contains departing node's ID, keys, successor and predecessor
-func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
-	if message.DepartingNodeID == local_node.Predecessor {
-		// store departing node's (predecessor) keys
-		if len(message.Keys) > 0 {
-			for key, data := range message.Keys {
-				local_node.Data[key] = data
-			}
-		}
 
-		// set new predecessor
-		local_node.Predecessor = message.NewPredecessor
-	}
 
-	if message.DepartingNodeID == local_node.Successor {
-		// remove departing node (successor) from successor list
-		deleteFromSuccessorList(message.DepartingNodeID)
-		// add new successor (last node in departing node's SuccessorList) to the list
-		addToSuccessorList(message.NewSuccessor)
-		// update AllNodeID and AllNodeMap by deleting the respective entries
-		deleteNodeEntry(message.DepartingNodeID)
+func HandleSuccessorNotification(request models.NotifyRequest,c *gin.Context) {
+    // successor check if newly join node key greater than its predeccesor id
+    if  local_node.Predecessor>0 && local_node.Predecessor < request.Key {
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
+        
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
 
-		// set new successor
-		newSuccessor := local_node.SuccessorList[0]
-		local_node.Successor = newSuccessor
+        sort.Ints(config.AllNodeID)
 
-		// call stabilization function
-		stabilize(config.AllNodeID, config.AllNodeMap)
-	}
+        fmt.Println("Successor's updated all node id: ",config.AllNodeID)
+
+        fmt.Println("Successor's updated all node map: ",config.AllNodeMap)
+
+        old_predecessor:=local_node.Predecessor
+
+        // update predeccesor to newly joined node
+        local_node.Predecessor=request.Key
+
+        c.JSON(http.StatusOK,models.NotifyResponse{
+            Message: "Welcome onboard to Chord Ring",
+        })
+
+        // after return response to newly join node, the successor must do something else
+        // TO DO
+        // 1. Successor request its's predeccessor to init stablization
+        // 2. Update its own finger table
+        // 3. Notify all other nodes in the system about the existence of newly joint node, by sending new node's ID and Address
+
+        // 1. SUCCESSOR REQUEST ITS PREDECESSOR TO INITIALIZE STABALIZATION
+
+        fmt.Println("old predeccesor is: ",old_predecessor)
+
+        address_predecessor:=config.AllNodeMap[old_predecessor]
+
+        fmt.Println("old predeccesor's address: ",address_predecessor)
+
+        // create new reques
+        stabalization_request:=models.StablizationSuccessorRequest{
+            Message: "A new node join our network, please kick off stabalization process",
+            Key: request.Key,
+            NodeAddress: request.NodeAddress,
+        }
+
+        // prepare request
+        jsonData, err := json.Marshal(stabalization_request)
+        if err != nil {
+            fmt.Println("Error marshaling JSON:", err)
+            return 
+        }
+
+        url:=fmt.Sprintf("http://%s/start_stablization",address_predecessor)
+
+        
+        // Create a new request
+        new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+        if err != nil {
+            fmt.Println("Error creating request:", err)
+            return
+        }
+
+         // Send the request using the http.Client
+        client := &http.Client{}
+        response, err := client.Do(new_req)
+        if err != nil {
+            fmt.Println("Error making POST request", err)
+            return 
+        }
+        defer response.Body.Close()
+
+        // Check the response status code
+        if response.StatusCode != http.StatusOK {
+            fmt.Println("Error: received non-200 response status:", response.Status)
+            return 
+        }
+
+        // Read and print the response body
+        var responseBody models.StablizationSuccessorResponse
+        if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+            fmt.Println("Error decoding response body for stablization", err)
+            return 
+        }
+
+        fmt.Println("Response from predeccesor:", responseBody)
+
+        fmt.Println("My predeccesor already notify newly joint node")
+
+        fmt.Println("At this stage, all nodes has correct S and P pointers, but AllNodeID, AllNodeMap and Finger tables are not consistent and updated")
+        // AT THIS POINT, ALL NODES ALREADY HAVE CORRECT POINTERS TO SUCCESSORS AND PREDECCORS
+        // HOWEVER, N-2 NODES ARE NOT AWARE OF THE EXISTENCE OF NEW NODE YET, HENCE I NEED TO SEND UPDATED ALL NODE MAP TO MALL 
+
+        // 2. UPDATE MY OWN FINGER TABLE
+        fmt.Println("Joining's succesor is updating finger table now")
+        UpdatePopulateFingerTable()
+        fmt.Println("Joining node's Succesor updated Finger Table ",local_node.FingerTable)
+
+        // 3. Notify all other nodes in the system about the existence of newly joint node, by sending new node's ID and Address
+        JoiningNodeSuccessorUpdateAllNodesInRingAboutNewNode(request.Key,request.NodeAddress)
+
+        fmt.Println("At this stage, all Nodes pointers have been corrected and all metadata are up to date")
+
+    } else if local_node.Predecessor==0  {
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
+    
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
+
+        sort.Ints(config.AllNodeID)
+
+        fmt.Println("Joining node's updated all node id: ",config.AllNodeID)
+
+        fmt.Println("Joining node's updated all node map: ",config.AllNodeMap)
+
+        // update predeccesor to newly joined node
+        local_node.Predecessor=request.Key
+
+        c.JSON(http.StatusOK,models.NotifyResponse{
+            Message: "I am the joining node and I already joined the Ring and updated all my pointers",
+        })
+
+    } else  {
+        c.JSON(http.StatusBadRequest, models.NotifyResponse{
+            Message: "you reached out to the wrong successor",
+        })
+    }
+}
+
+func JoiningNodeSuccessorUpdateAllNodesInRingAboutNewNode(new_node_key int,new_node_address string) {
+    
+    for node_key,node_address := range config.AllNodeMap {
+        if node_key != local_node.ID {
+            // create new reques
+            stabalization_request:=models.UpdateMetadataUponNewNodeJoinRequest{
+                Key: new_node_key,
+                NodeAddress: new_node_address,
+            }
+
+            // prepare request
+            jsonData, err := json.Marshal(stabalization_request)
+            if err != nil {
+                fmt.Println("Error marshaling JSON:", err)
+                return 
+            }
+
+            fmt.Println("I am sending update metadata request to Node key ",node_key," - Node address ",node_address)
+
+            url:=fmt.Sprintf("http://%s/update_metadata",node_address)
+
+
+            // Create a new request
+            new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+            if err != nil {
+                fmt.Println("Error creating request:", err)
+                return
+            }
+
+            // Send the request using the http.Client
+            client := &http.Client{}
+            response, err := client.Do(new_req)
+            if err != nil {
+                fmt.Println("Error making POST request", err)
+                return 
+            }
+            defer response.Body.Close()
+
+            // Check the response status code
+            if response.StatusCode != http.StatusOK {
+                fmt.Println("Error: received non-200 response status:", response.Status)
+                return 
+            }
+
+            // Read and print the response body
+            var responseBody models.UpdateMetadataUponNewNodeJoinResponse
+            if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+                fmt.Println("Error decoding response body for stablization", err)
+                return 
+            }
+
+            fmt.Println("Response from node for update metadata request:", responseBody)
+        } 
+    }
+    
 }
 
 func HandleNodeInvoluntaryLeave() {
@@ -591,13 +755,105 @@ func find_closest_preceding_node(node_id int) int {
 	return local_node.Successor
 }
 
-// FindSuccessor is another exported function to find the successor of a given key.
-func FindSuccessor(key string) string {
-	fmt.Printf("Finding successor for key %s...\n", key)
-	// Placeholder return value
-	return "SuccessorNode"
+func HandleStartStablization(request models.StablizationSuccessorRequest,c *gin.Context){
+    my_successor:=local_node.Successor
+
+    // if new node id less than my succesor, i will update my succesor
+    if request.Key<my_successor && request.Key>local_node.ID {
+        // update successor to joining node
+        local_node.Successor=request.Key
+        
+        // update Map node and address
+        config.AllNodeMap[request.Key]=request.NodeAddress
+
+        // update All node address
+        config.AllNodeID=append(config.AllNodeID, request.Key)
+
+        sort.Ints(config.AllNodeID)
+
+        fmt.Println("Stabalization - My updated all node id: ",config.AllNodeID)
+
+        fmt.Println("Stabalization - My updated all node map: ",config.AllNodeMap)
+
+        // predeccesor notify new join node
+
+        fmt.Println("Predecessor notify newly joint node so the new node can update its predeccesor pointer")
+        // / create new payload
+        notify_request:=models.NotifyRequest{
+            Key: local_node.ID,
+            NodeAddress: local_node.Address,
+        }
+
+        // prepare request
+        jsonData, err := json.Marshal(notify_request)
+        if err != nil {
+            fmt.Println("Error marshaling JSON:", err)
+            return 
+        }
+
+        url:=fmt.Sprintf("http://%s/notify",request.NodeAddress)
+
+        // Create a new request
+        new_req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+        if err != nil {
+            fmt.Println("Error creating request:", err)
+            return
+        }
+
+        // Send the request using the http.Client
+        client := &http.Client{}
+        response, err := client.Do(new_req)
+        if err != nil {
+            fmt.Println("Error making POST request", err)
+            return 
+        }
+        defer response.Body.Close()
+
+        // Check the response status code
+        if response.StatusCode != http.StatusOK {
+            fmt.Println("Error: received non-200 response status:", response.Status)
+            return 
+        }
+
+        // Read and print the response body
+        var newResponseBody models.NotifyResponse
+        if err := json.NewDecoder(response.Body).Decode(&newResponseBody); err != nil {
+            fmt.Println("Error decoding response body", err)
+            return 
+        }
+
+        fmt.Println("Response from server: ", newResponseBody.Message)
+
+        c.JSON(http.StatusOK,models.StablizationSuccessorResponse{
+            Message: "Complete local stabalization",
+        })
+    
+    } else {
+        c.JSON(http.StatusBadRequest, models.StablizationSuccessorResponse{
+            Message: "you reached out to the wrong successor",
+        })
+    }
 }
 
-func Test_pack() {
-	fmt.Println("test package successfully !")
+
+func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest,c *gin.Context){
+    // update Map node and address
+    config.AllNodeMap[request.Key]=request.NodeAddress
+    
+    // update All node address
+    config.AllNodeID=append(config.AllNodeID, request.Key)
+
+    sort.Ints(config.AllNodeID)
+
+    fmt.Println("Updated all node id upon new node joining: ",config.AllNodeID)
+
+    fmt.Println("Updated all node map upon new node joining: ",config.AllNodeMap)
+
+    // update finder table
+    UpdatePopulateFingerTable()
+    fmt.Println("Updated finger table upon new node joining: ",local_node.FingerTable)
+
+    c.JSON(http.StatusOK,models.UpdateMetadataUponNewNodeJoinResponse{
+        Message: "Successfully updated All Node Map, All Node ID and Finger table with joined node's ID and Address",
+    })
 }

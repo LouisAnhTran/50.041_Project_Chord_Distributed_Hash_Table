@@ -1,6 +1,7 @@
 package config
 
 const (
-	HashRange        = 200
-	FingerTableEntry = 5
+	HashRange        = 1000
+	FingerTableEntry = 4
+	NewJoinNodeAddress = "node11:8080"
 )
