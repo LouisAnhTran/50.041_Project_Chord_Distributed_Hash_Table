@@ -27,9 +27,8 @@ func SetupRoutes(router *gin.Engine) {
 }
 
 func leave(c *gin.Context) {
-	var msg models.LeaveRingMessage
-	msg = *chord.GetLocalNode().NewLeaveRingMessage()
-	chord.HandleLeaveSequence(msg, c)
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Requested to leave ring...")
+	chord.HandleLeaveSequence()
 }
 
 func update_metadata(c *gin.Context) {

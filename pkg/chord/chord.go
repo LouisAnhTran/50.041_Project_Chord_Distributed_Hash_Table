@@ -791,8 +791,39 @@ func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest, c
 	})
 }
 
-func HandleLeaveSequence(msg models.LeaveRingMessage, c *gin.Context) {
-	// TODO: Send HTTP request to notify_leave routes for predecessor and successor nodes.
+func HandleLeaveSequence() {
+	var localNode = GetLocalNode()
+	var msg models.LeaveRingMessage
+	msg = *localNode.NewLeaveRingMessage()
+	fmt.Println("[ Node", localNode.ID, "] LeaveRingMessage:", msg)
+
+	var jsonMsg, err = json.Marshal(msg)
+	if err != nil {
+		fmt.Println("Error during LeaveRingMessage JSON conversion.")
+	}
+
+	var successorAddr = config.NodeAddresses[localNode.Successor]
+	var predecessorAddr = config.NodeAddresses[localNode.Predecessor]
+	var successorUrl = GenerateUrl(successorAddr, "/notify_leave")
+	var predecessorUrl = GenerateUrl(predecessorAddr, "notify_leave")
+
+	// Send POST request to successor
+	sRes, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] Error sending request to successor at address", successorAddr)
+	}
+	defer sRes.Body.Close()
+
+	// Send POST request to predecessor
+	pRes, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] Error sending request to predecessor at address", predecessorAddr)
+	}
+	defer pRes.Body.Close()
+
+	// The node is assumed to have left at this point. Any faults happening here will be
+	// dealt by the successors and predecessors.
 }
 
 func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
