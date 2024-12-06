@@ -295,6 +295,10 @@ func GetLocalNode() *Node {
 	return local_node
 }
 
+func GenerateUrl(addr string, endpoint string) string {
+	return "http://" + addr + "/" + endpoint
+}
+
 func send_request_to_successor_for_storing_data(node_address string, data_to_be_store string, data_identifier int, c *gin.Context) {
 	url := fmt.Sprintf("http://%s/internal_store_data", node_address)
 
