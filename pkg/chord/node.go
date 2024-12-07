@@ -18,6 +18,15 @@ var local_node = &Node{
 	Data:          map[int]string{},
 }
 
+func (n *Node) UpdateData(data map[int]string) {
+	defer n.RWLock.Unlock()
+
+	n.RWLock.Lock()
+	for key, value := range data {
+		n.Data[key] = value
+	}
+}
+
 func GetLocalNode() *Node {
 	return local_node
 }

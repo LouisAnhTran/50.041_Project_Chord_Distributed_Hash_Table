@@ -9,7 +9,9 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -794,6 +796,7 @@ func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest, c
 	})
 }
 
+// Starts leave sequence for a node
 func HandleLeaveSequence() {
 	var localNode = GetLocalNode()
 	var msg models.LeaveRingMessage
@@ -807,7 +810,7 @@ func HandleLeaveSequence() {
 
 	var successorAddr = config.AllNodeMap[localNode.Successor]
 	var predecessorAddr = config.AllNodeMap[localNode.Predecessor]
-	var successorUrl = GenerateUrl(successorAddr, "/notify_leave")
+	var successorUrl = GenerateUrl(successorAddr, "notify_leave")
 	var predecessorUrl = GenerateUrl(predecessorAddr, "notify_leave")
 
 	// Send POST request to successor
@@ -827,38 +830,44 @@ func HandleLeaveSequence() {
 	}
 	defer pRes.Body.Close()
 
+	os.Exit(0) // Kill node
+
 	// The node is assumed to have left at this point. Any faults happening here will be
 	// dealt by the successors and predecessors.
 }
 
-func HandleNodeVoluntaryLeave(message models.LeaveRingMessage, c *gin.Context) {
-	if message.DepartingNodeID == local_node.Predecessor {
-		// store departing node's (predecessor) keys
-		if len(message.Keys) > 0 {
-			for key, data := range message.Keys {
-				local_node.Data[key] = data
-			}
+// Handles leave sequence for a leaving node
+func HandleNodeLeave(msg models.LeaveRingMessage) {
+	if msg.DepartingNodeID == GetLocalNode().Successor {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Replacing successor with Node"+
+			strconv.Itoa(msg.DepartingNodeID)+
+			"'s successor Node", msg.NewSuccessor)
+
+		GetLocalNode().Successor = msg.NewSuccessor
+		fmt.Println("[ Node", GetLocalNode().ID, "] New successor:", GetLocalNode().Successor)
+
+		// Update successor list and node entries
+		deleteFromSuccessorList(msg.DepartingNodeID)
+		deleteNodeEntry(msg.DepartingNodeID)
+		addToSuccessorList(msg.SuccessorListNode)
+
+		// TODO: Send a copy of keys to successor
+	} else if msg.DepartingNodeID == GetLocalNode().Predecessor {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Replacing predecessor with Node"+
+			strconv.Itoa(msg.DepartingNodeID)+
+			"'s predecessor Node", msg.NewPredecessor)
+
+		GetLocalNode().Predecessor = msg.NewPredecessor
+		fmt.Println("[ Node", GetLocalNode().ID, "] New predecessor:", GetLocalNode().Predecessor)
+
+		if len(msg.Keys) > 0 {
+			GetLocalNode().UpdateData(msg.Keys)
 		}
-
-		// set new predecessor
-		local_node.Predecessor = message.NewPredecessor
+	} else {
+		// TODO: INVALID REQUEST
 	}
 
-	if message.DepartingNodeID == local_node.Successor {
-		// remove departing node (successor) from successor list
-		deleteFromSuccessorList(message.DepartingNodeID)
-		// add new successor (last node in departing node's SuccessorList) to the list
-		addToSuccessorList(message.NewSuccessor)
-		// update AllNodeID and AllNodeMap by deleting the respective entries
-		deleteNodeEntry(message.DepartingNodeID)
-
-		// set new successor
-		newSuccessor := local_node.SuccessorList[0]
-		local_node.Successor = newSuccessor
-
-		// call stabilization function
-		stabilize(config.AllNodeID, config.AllNodeMap)
-	}
+	// TODO: STABILIZE
 }
 
 func HandleNodeInvoluntaryLeave() {
@@ -936,7 +945,7 @@ func HandleCycleCheckStart() {
 	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
 	if err != nil {
 		fmt.Println("[ Node", GetLocalNode().ID, "] Error sending cycle check initiation request to successor at address", successorAddr)
-		fmt.Println(err.Error())
+		fmt.Println("[ Node", GetLocalNode().ID, "]", err.Error())
 		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
 		return
 	} else if res.StatusCode != http.StatusOK {
@@ -948,9 +957,10 @@ func HandleCycleCheckStart() {
 }
 
 func HandleCycleCheck(msg models.CycleCheckMessage) {
-	if msg.Initiator == GetLocalNode().ID {
+	if slices.Contains(msg.Nodes, GetLocalNode().ID) {
 		nodeStructString := "<- " + strings.Trim(strings.Join(strings.Fields(fmt.Sprint(msg.Nodes)), " <-> "), "[]") + " ->"
 		fmt.Println("[ Node", GetLocalNode().ID, "] Cycle check finished. ")
+		fmt.Println("[ Node", GetLocalNode().ID, "] Initiator:", msg.Initiator)
 		fmt.Println("[ Node", GetLocalNode().ID, "] Ring structure:", nodeStructString)
 		return
 	}
@@ -970,7 +980,7 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
 	if err != nil {
 		fmt.Println("[ Node", GetLocalNode().ID, "] Error sending cycle check request to successor at address", successorAddr)
-		fmt.Println(err.Error())
+		fmt.Println("[ Node", GetLocalNode().ID, "]", err.Error())
 		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
 		return
 	} else if res.StatusCode != http.StatusOK {

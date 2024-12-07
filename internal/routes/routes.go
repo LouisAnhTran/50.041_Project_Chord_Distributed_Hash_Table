@@ -22,16 +22,37 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
 	router.GET("/leave", leave)
 	router.GET("/cycle_check", cycleCheckStart)
+	router.GET("/kill", kill)
 	router.POST("/cycle_check", cycleCheck)
+	router.POST("/notify_leave", relink)
 	router.POST("/notify", notify)
 	router.POST("/start_stablization", start_stablization)
 	router.POST("/update_metadata", update_metadata)
 }
 
-func leave(c *gin.Context) {
+func kill(c *gin.Context) {
+	// See ya.
+	c.JSON(http.StatusOK, "")
 
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] I died")
+	os.Exit(0)
+}
+
+func leave(c *gin.Context) {
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Requested to leave ring...")
 	chord.HandleLeaveSequence()
+}
+
+func relink(c *gin.Context) {
+	var msg models.LeaveRingMessage
+
+	if err := c.BindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Handling leave sequence for departing node", msg.DepartingNodeID)
+	chord.HandleNodeLeave(msg)
 }
 
 func cycleCheck(c *gin.Context) {
