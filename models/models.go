@@ -101,3 +101,15 @@ type LeaveRingMessage struct {
 	NewSuccessor    int            `json:"new_successor"`   // last node in departing node's successor list to be added to target node's successor list
 	NewPredecessor  int            `json:"new_predecessor"` // departing node's predecessor
 }
+
+type CycleCheckMessage struct {
+	Initiator int
+	Nodes     []int
+}
+
+func NewCycleCheckMessage() *CycleCheckMessage {
+	return &CycleCheckMessage{
+		Initiator: -1,
+		Nodes:     make([]int, 0),
+	}
+}

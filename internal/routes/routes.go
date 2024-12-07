@@ -21,6 +21,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/retrieve_data/:id", retrieve_data)
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
 	router.GET("/leave", leave)
+	router.GET("/cycle_check", cycleCheckStart)
+	router.POST("/cycle_check", cycleCheck)
 	router.POST("/notify", notify)
 	router.POST("/start_stablization", start_stablization)
 	router.POST("/update_metadata", update_metadata)
@@ -29,6 +31,12 @@ func SetupRoutes(router *gin.Engine) {
 func leave(c *gin.Context) {
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Requested to leave ring...")
 	chord.HandleLeaveSequence()
+}
+
+func cycleCheck(c *gin.Context)
+
+func cycleCheckStart(c *gin.Context) {
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Starting cycle check...")
 }
 
 func update_metadata(c *gin.Context) {

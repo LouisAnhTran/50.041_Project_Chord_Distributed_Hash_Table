@@ -913,3 +913,7 @@ func find_closest_preceding_node(node_id int) int {
 	}
 	return local_node.Successor
 }
+
+func HandleCycleCheckStart() {
+
+}
