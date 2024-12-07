@@ -213,7 +213,9 @@ func InitChordRingStructure() {
 
 	// Populate Finger Table
 	PopulateFingerTable()
-	fmt.Println("my all node id: ", config.AllNodeID, " || my id is: ", local_node.ID, " || my finger table: ", local_node.FingerTable, " || my map: ", config.AllNodeMap, " || my successor: ", local_node.Successor, " || predecessor: ", local_node.Predecessor)
+	// Populate Successor List
+	PopulateSuccessorList()
+	fmt.Println("my all node id: ", config.AllNodeID, " || my id is: ", local_node.ID, " || my finger table: ", local_node.FingerTable, " || my successor list: ", local_node.SuccessorList, " || my map: ", config.AllNodeMap, " || my successor: ", local_node.Successor, " || predecessor: ", local_node.Predecessor)
 }
 
 func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {

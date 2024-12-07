@@ -31,10 +31,12 @@ type Node struct {
 }
 
 func (n *Node) NewLeaveRingMessage() *models.LeaveRingMessage {
+	succListLen := len(n.SuccessorList)
+	lastNodeInSuccessorList := n.SuccessorList[succListLen-1]
 	return &models.LeaveRingMessage{
 		DepartingNodeID: n.ID,
 		Keys:            n.Data,
-		NewSuccessor:    n.Successor,
+		NewSuccessor:    lastNodeInSuccessorList,
 		NewPredecessor:  n.Predecessor,
 	}
 }
