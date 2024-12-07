@@ -944,6 +944,7 @@ func HandleCycleCheckStart() {
 		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
 		return
 	}
+	defer res.Body.Close()
 }
 
 func HandleCycleCheck(msg models.CycleCheckMessage) {
@@ -977,4 +978,5 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
 		return
 	}
+	defer res.Body.Close()
 }
