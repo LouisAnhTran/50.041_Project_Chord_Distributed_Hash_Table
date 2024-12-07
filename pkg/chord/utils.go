@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/models"
@@ -291,12 +292,8 @@ func send_request_to_successor_for_retrieving_data(node_address string, data_ide
 
 }
 
-func GetLocalNode() *Node {
-	return local_node
-}
-
 func GenerateUrl(addr string, endpoint string) string {
-	return "http://" + addr + "/" + endpoint
+	return "http://" + addr + "/" + strings.ReplaceAll(endpoint, "/", "")
 }
 
 func send_request_to_successor_for_storing_data(node_address string, data_to_be_store string, data_identifier int, c *gin.Context) {

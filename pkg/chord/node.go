@@ -18,6 +18,10 @@ var local_node = &Node{
 	Data:          map[int]string{},
 }
 
+func GetLocalNode() *Node {
+	return local_node
+}
+
 // Node represents a single node in the Chord network.
 type Node struct {
 	ID            int    // Unique identifier for the node
@@ -34,9 +38,10 @@ func (n *Node) NewLeaveRingMessage() *models.LeaveRingMessage {
 	succListLen := len(n.SuccessorList)
 	lastNodeInSuccessorList := n.SuccessorList[succListLen-1]
 	return &models.LeaveRingMessage{
-		DepartingNodeID: n.ID,
-		Keys:            n.Data,
-		NewSuccessor:    lastNodeInSuccessorList,
-		NewPredecessor:  n.Predecessor,
+		DepartingNodeID:   n.ID,
+		Keys:              n.Data,
+		SuccessorListNode: lastNodeInSuccessorList,
+		NewSuccessor:      n.Successor,
+		NewPredecessor:    n.Predecessor,
 	}
 }
