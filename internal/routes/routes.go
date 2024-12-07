@@ -21,26 +21,51 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/retrieve_data/:id", retrieve_data)
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
 	router.GET("/leave", leave)
-	router.GET("/cycle_check", cycleCheckStart)
 	router.GET("/kill", kill)
+	router.GET("/cycle_check", cycleCheckStart)
 	router.POST("/cycle_check", cycleCheck)
 	router.POST("/notify_leave", relink)
+	router.POST("/leave_data", updateDataOnLeave)
+	router.POST("/reconcile", reconcile)
 	router.POST("/notify", notify)
 	router.POST("/start_stablization", start_stablization)
 	router.POST("/update_metadata", update_metadata)
 }
 
+func reconcile(c *gin.Context) {
+	var msg models.ReconcileMessage
+	if err := c.BindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
+	chord.HandleReconciliation(msg)
+}
+
 func kill(c *gin.Context) {
+	defer os.Exit(0)
+
 	// See ya.
-	c.JSON(http.StatusOK, "")
+	c.JSON(http.StatusOK, models.NewHTTPErrorMessage("See ya.", ""))
 
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] I died")
-	os.Exit(0)
 }
 
 func leave(c *gin.Context) {
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Requested to leave ring...")
 	chord.HandleLeaveSequence()
+}
+
+func updateDataOnLeave(c *gin.Context) {
+	var msg models.DataUpdateMessage
+	if err := c.BindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, "")
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Received data of Node", msg.DepartingNodeID, "from Node", msg.SenderID)
+	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Data:", msg.Data)
 }
 
 func relink(c *gin.Context) {

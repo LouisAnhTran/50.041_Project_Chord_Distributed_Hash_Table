@@ -48,7 +48,7 @@ func (n *Node) NewLeaveRingMessage() *models.LeaveRingMessage {
 	lastNodeInSuccessorList := n.SuccessorList[succListLen-1]
 	return &models.LeaveRingMessage{
 		DepartingNodeID:   n.ID,
-		Keys:              n.Data,
+		Data:              n.Data,
 		SuccessorListNode: lastNodeInSuccessorList,
 		NewSuccessor:      n.Successor,
 		NewPredecessor:    n.Predecessor,
