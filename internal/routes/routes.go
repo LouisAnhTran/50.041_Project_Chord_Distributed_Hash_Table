@@ -29,14 +29,25 @@ func SetupRoutes(router *gin.Engine) {
 }
 
 func leave(c *gin.Context) {
+
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Requested to leave ring...")
 	chord.HandleLeaveSequence()
 }
 
-func cycleCheck(c *gin.Context)
+func cycleCheck(c *gin.Context) {
+	var cycleCheckMessage models.CycleCheckMessage
+
+	if err := c.BindJSON(&cycleCheckMessage); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
+	chord.HandleCycleCheck(cycleCheckMessage)
+}
 
 func cycleCheckStart(c *gin.Context) {
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Starting cycle check...")
+	chord.HandleCycleCheckStart()
 }
 
 func update_metadata(c *gin.Context) {

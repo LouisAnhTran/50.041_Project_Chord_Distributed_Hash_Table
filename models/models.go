@@ -113,3 +113,15 @@ func NewCycleCheckMessage() *CycleCheckMessage {
 		Nodes:     make([]int, 0),
 	}
 }
+
+type HTTPErrorMessage struct {
+	msg string
+	err string
+}
+
+func NewHTTPErrorMessage(msg string, err string) *HTTPErrorMessage {
+	return &HTTPErrorMessage{
+		msg: msg,
+		err: err,
+	}
+}

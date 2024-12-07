@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
@@ -804,15 +805,16 @@ func HandleLeaveSequence() {
 		fmt.Println("Error during LeaveRingMessage JSON conversion.")
 	}
 
-	var successorAddr = config.NodeAddresses[localNode.Successor]
-	var predecessorAddr = config.NodeAddresses[localNode.Predecessor]
+	var successorAddr = config.AllNodeMap[localNode.Successor]
+	var predecessorAddr = config.AllNodeMap[localNode.Predecessor]
 	var successorUrl = GenerateUrl(successorAddr, "/notify_leave")
 	var predecessorUrl = GenerateUrl(predecessorAddr, "notify_leave")
 
 	// Send POST request to successor
 	sRes, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
 	if err != nil {
-		fmt.Println("[ Node", localNode.ID, "] Error sending request to successor at address", successorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Error sending leave request to successor at address", successorAddr)
+		fmt.Println(err.Error())
 	}
 	defer sRes.Body.Close()
 
@@ -820,7 +822,8 @@ func HandleLeaveSequence() {
 	pRes, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
 
 	if err != nil {
-		fmt.Println("[ Node", localNode.ID, "] Error sending request to predecessor at address", predecessorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Error sending leave request to predecessor at address", predecessorAddr)
+		fmt.Println(err.Error())
 	}
 	defer pRes.Body.Close()
 
@@ -915,5 +918,63 @@ func find_closest_preceding_node(node_id int) int {
 }
 
 func HandleCycleCheckStart() {
+	msg := *models.NewCycleCheckMessage()
+	msg.Initiator = GetLocalNode().ID
+	msg.Nodes = append(msg.Nodes, GetLocalNode().ID)
 
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("[ Node", GetLocalNode().ID, "] JSON error during cycle check initiation.")
+		return
+	}
+
+	successorAddr := config.AllNodeMap[GetLocalNode().Successor]
+	successorUrl := GenerateUrl(successorAddr, "cycle_check")
+
+	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
+	if err != nil {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Error sending cycle check initiation request to successor at address", successorAddr)
+		fmt.Println(err.Error())
+		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Non-200 response received during cycle check initiation from successor at address", successorAddr)
+		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
+		return
+	}
+}
+
+func HandleCycleCheck(msg models.CycleCheckMessage) {
+	if msg.Initiator == GetLocalNode().ID {
+		nodeStructString := "<- " + strings.Trim(strings.Join(strings.Fields(fmt.Sprint(msg.Nodes)), " <-> "), "[]") + " ->"
+		fmt.Println("[ Node", GetLocalNode().ID, "] Cycle check finished. ")
+		fmt.Println("[ Node", GetLocalNode().ID, "] Ring structure:", nodeStructString)
+		return
+	}
+
+	fmt.Println("[ Node", GetLocalNode().ID, "] Forwarding cycle check...")
+	msg.Nodes = append(msg.Nodes, GetLocalNode().ID)
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("[ Node", GetLocalNode().ID, "] JSON error during cycle check.")
+	}
+
+	successorAddr := config.AllNodeMap[GetLocalNode().Successor]
+	successorUrl := GenerateUrl(successorAddr, "cycle_check")
+
+	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
+	if err != nil {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Error sending cycle check request to successor at address", successorAddr)
+		fmt.Println(err.Error())
+		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", GetLocalNode().ID, "] Non-200 response received during cycle check from successor at address", successorAddr)
+		fmt.Println("[ Node", GetLocalNode().ID, "] Aborting...")
+		return
+	}
 }
