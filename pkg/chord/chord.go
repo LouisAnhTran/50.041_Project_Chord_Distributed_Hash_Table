@@ -1058,7 +1058,7 @@ func HandleReconciliation(msg models.ReconcileMessage) {
 	fmt.Println("[ Node", localNode.ID, "] Forwarding reconciliation message...")
 
 	sList := msg.SuccessorList[:len(msg.SuccessorList)-1]
-	sList = append([]int{localNode.ID}, sList...)
+	sList = append([]int{localNode.Successor}, sList...)
 	localNode.SuccessorList = sList
 
 	msg.SuccessorList = sList
