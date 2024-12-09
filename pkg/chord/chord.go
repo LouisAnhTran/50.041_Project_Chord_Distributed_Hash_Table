@@ -796,7 +796,7 @@ func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest, c
 	})
 }
 
-// Starts leave sequence for a node
+// Starts voluntary leave sequence for a node
 func HandleLeaveSequence() {
 	defer os.Exit(0) // Kill node
 
@@ -890,16 +890,16 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 	}
 }
 
-func HandleNodeInvoluntaryLeave() {
-	for _, id := range local_node.SuccessorList {
-		addr := config.AllNodeMap[id]
-		client := &http.Client{Timeout: 3 * time.Second} // timeout for request
+func HandleInvoluntaryLeaveSequence() {
+	localNode := GetLocalNode()
+	for _, id := range localNode.SuccessorList {
+		successorAddr := config.AllNodeMap[id]
 		// call health check on each node
-		url := fmt.Sprintf("http://%s/health_check", addr)
-		resp, err := client.Get(url)
+		url := fmt.Sprintf("http://%s/health_check", successorAddr)
+		resp, err := http.Get(url)
 
 		if err != nil {
-			log.Fatalf("Node %d (%s) is unresponsive: %v\n", id, addr, err)
+			log.Fatalf("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
 			continue
 		}
 
@@ -909,29 +909,107 @@ func HandleNodeInvoluntaryLeave() {
 			// Decode JSON response into a map
 			var body map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				log.Fatalf("Node %d (%s): failed to decode response body: %v\n", id, addr, err)
+				log.Fatalf("Node %d (%s): failed to decode response body: %v\n", id, successorAddr, err)
 				continue
 			}
 
 			// Check the "message" field
 			if message, ok := body["message"].(string); ok && message == "good health" {
-				fmt.Printf("Node %d (%s) is healthy.\n", id, addr)
+				fmt.Printf("Node %d (%s) is healthy.\n", id, successorAddr)
 				// set this live node as new successor
-				local_node.Successor = id
-				// call stabilize
-				stabilize(config.AllNodeID, config.AllNodeMap)
+				localNode.Successor = id
+
+				// notify new successor
+				msg := models.InvoluntaryLeaveMessage{NewPredecessor: localNode.ID}
+
+				jsonMsg, jsonErr := json.Marshal(msg)
+				if jsonErr != nil {
+					fmt.Println("[ Node", localNode.ID, "] JSON error during relink for involuntary node leave process.")
+				}
+
+				successorUrl := GenerateUrl(successorAddr, "notify_new_successor")
+
+				res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+				if err != nil {
+					// new successor might have suddenly died, skip to the next successor
+					fmt.Printf("Successor %d suddenly died. Trying next successor...\n", id)
+					continue
+				} else if res.StatusCode != http.StatusOK {
+					fmt.Println("[ Node", localNode.ID, "] Non-200 response received during relink to successor at address", successorAddr, "for involuntary node leave process.")
+					fmt.Println("[ Node", localNode.ID, "] Aborting...")
+					return
+				}
+
+				StartReconciliation()
 				break
 			} else {
-				fmt.Printf("Node %d (%s) returned unexpected message: %v\n", id, addr, body)
+				fmt.Printf("Node %d (%s) returned unexpected message: %v\n", id, successorAddr, body)
 			}
 		} else {
-			fmt.Printf("Node %d (%s) returned unhealthy status: %d\n", id, addr, resp.StatusCode)
+			fmt.Printf("Node %d (%s) returned unhealthy status: %d\n", id, successorAddr, resp.StatusCode)
 		}
 	}
 
 	// TODO:
 	// Modified closest_preceding_node (in fig 5) searches not only the finger table but also the successor list for the most immediate predecessor of id.
 	// If a node fails during the find_successor, the lookup proceeds, after a timeout, by trying the next best predecessor (of key k) among the nodes in the finger table and the successor list (only choose from finger table if no node better precedes successor list's best predecessor than from finger table's).
+}
+
+func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
+	newPredecessor := msg.NewPredecessor
+	localNode := GetLocalNode()
+	localNode.Successor = newPredecessor
+}
+
+// Contacting Node checks whether the dead node is its successor
+func HandleInvoluntaryDeadNode(nodeId int) {
+	localNode := GetLocalNode()
+	if nodeId == localNode.Successor {
+		HandleInvoluntaryLeaveSequence()
+	} else {
+		// broadcast dead node id to let its corresponding predecessor to handle it
+		BroadcastDeadNode(nodeId)
+	}
+}
+
+func BroadcastDeadNode(deadNodeId int) {
+	localNode := GetLocalNode()
+	msg := models.BroadcastMessage{DeadNode: deadNodeId}
+	jsonMsg, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		fmt.Println("[ Node", localNode.ID, "] JSON error during broadcast for involuntary node leave process.")
+	}
+
+	for _, nodeId := range config.AllNodeID {
+		nodeAddr := config.AllNodeMap[nodeId]
+		nodeUrl := GenerateUrl(nodeAddr, "receive_broadcast_dead_node")
+
+		res, err := http.Post(nodeUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+		if err != nil || res.StatusCode/500 >= 1 {
+			// detected target node is dead, new broadcast
+			BroadcastDeadNode(nodeId)
+		} else if res.StatusCode != http.StatusOK {
+			fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
+			fmt.Println("[ Node", localNode.ID, "] Aborting...")
+			return
+		}
+		defer res.Body.Close()
+	}
+}
+
+func HandleReceiveBroadcast(msg models.BroadcastMessage) {
+	localNode := GetLocalNode()
+	deadNodeId := msg.DeadNode
+
+	// check if dead node is its successor
+	if deadNodeId == localNode.Successor {
+		HandleInvoluntaryLeaveSequence()
+	} else {
+		// do nothing
+		return
+	}
 }
 
 func find_closest_preceding_node(node_id int) int {
@@ -970,6 +1048,8 @@ func HandleCycleCheckStart() {
 			fmt.Println("[ Node", localNode.ID, "]", err.Error())
 		}
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		// handle involuntary node leave.
+		HandleInvoluntaryDeadNode(localNode.Successor)
 		return
 	} else if res.StatusCode != http.StatusOK {
 		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check initiation from successor at address", successorAddr)
@@ -1006,6 +1086,7 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 		fmt.Println("[ Node", localNode.ID, "] Error sending cycle check request to successor at address", successorAddr)
 		fmt.Println("[ Node", localNode.ID, "]", err.Error())
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		HandleInvoluntaryDeadNode(localNode.Successor)
 		return
 	} else if res.StatusCode != http.StatusOK {
 		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check from successor at address", successorAddr)

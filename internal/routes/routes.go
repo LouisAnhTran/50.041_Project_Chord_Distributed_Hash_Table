@@ -30,6 +30,20 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/notify", notify)
 	router.POST("/start_stablization", start_stablization)
 	router.POST("/update_metadata", update_metadata)
+	router.POST("/notify_new_successor", handleNewSuccessorNotification)
+	router.POST("/receive_broadcast_dead_node", handleReceiveBroadcast)
+}
+
+func handleReceiveBroadcast(c *gin.Context) {
+	var msg models.BroadcastMessage
+	c.JSON(http.StatusOK, "")
+	chord.HandleReceiveBroadcast(msg)
+}
+
+func handleNewSuccessorNotification(c *gin.Context) {
+	var msg models.InvoluntaryLeaveMessage
+	c.JSON(http.StatusOK, "")
+	chord.HandleNodeInvoluntaryLeave(msg)
 }
 
 func reconcile(c *gin.Context) {

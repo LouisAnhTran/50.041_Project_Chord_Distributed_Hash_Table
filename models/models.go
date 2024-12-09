@@ -105,6 +105,15 @@ type LeaveRingMessage struct {
 	NewPredecessor    int            `json:"new_predecessor"`
 }
 
+type InvoluntaryLeaveMessage struct { // sent by contacting node to its new successor
+	NewPredecessor int `json:"new_predecessor"` // this is the contacting node that detected the involuntary node leave
+}
+
+type BroadcastMessage struct {
+	//SenderID int `json:"sender_id"`
+	DeadNode int `json:"dead_node"`
+}
+
 type CycleCheckMessage struct {
 	Initiator int
 	Nodes     []int
