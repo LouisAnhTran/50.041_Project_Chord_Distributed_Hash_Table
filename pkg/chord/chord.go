@@ -890,8 +890,9 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 	}
 }
 
-func HandleInvoluntaryLeaveSequence() {
+func HandleInvoluntaryLeaveSequence(deadNodeId int) {
 	localNode := GetLocalNode()
+	// predecessor will double check if broadcasted dead node is actually dead
 	for _, id := range localNode.SuccessorList {
 		successorAddr := config.AllNodeMap[id]
 		// call health check on each node
@@ -901,7 +902,11 @@ func HandleInvoluntaryLeaveSequence() {
 		resp, err := http.Get(url)
 
 		if err != nil {
-			fmt.Println("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
+			fmt.Printf("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
+			// double check passes, remove dead node from AllNodeID
+			if id == deadNodeId {
+				deleteNodeEntry(id)
+			}
 			continue
 		}
 
@@ -911,7 +916,7 @@ func HandleInvoluntaryLeaveSequence() {
 			// Decode JSON response into a map
 			var body map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				log.Fatalf("Node %d (%s): failed to decode response body: %v\n", id, successorAddr, err)
+				fmt.Println("Error decoding response body", err)
 				continue
 			}
 
@@ -961,17 +966,17 @@ func HandleInvoluntaryLeaveSequence() {
 func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
 	newPredecessor := msg.NewPredecessor
 	localNode := GetLocalNode()
-	localNode.Successor = newPredecessor
+	localNode.Predecessor = newPredecessor
 }
 
 // Contacting Node checks whether the dead node is its successor
-func HandleInvoluntaryDeadNode(nodeId int) {
+func HandleInvoluntaryDeadNode(deadNodeId int) {
 	localNode := GetLocalNode()
-	if nodeId == localNode.Successor {
-		HandleInvoluntaryLeaveSequence()
+	if deadNodeId == localNode.Successor {
+		HandleInvoluntaryLeaveSequence(deadNodeId)
 	} else {
 		// broadcast dead node id to let its corresponding predecessor to handle it
-		BroadcastDeadNode(nodeId)
+		BroadcastDeadNode(deadNodeId)
 	}
 }
 
@@ -1007,7 +1012,7 @@ func HandleReceiveBroadcast(msg models.BroadcastMessage) {
 
 	// check if dead node is its successor
 	if deadNodeId == localNode.Successor {
-		HandleInvoluntaryLeaveSequence()
+		HandleInvoluntaryLeaveSequence(deadNodeId)
 	} else {
 		// do nothing
 		return
