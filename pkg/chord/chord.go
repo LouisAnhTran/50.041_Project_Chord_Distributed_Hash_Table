@@ -895,11 +895,13 @@ func HandleInvoluntaryLeaveSequence() {
 	for _, id := range localNode.SuccessorList {
 		successorAddr := config.AllNodeMap[id]
 		// call health check on each node
+
+		fmt.Println("[ Node", GetLocalNode().ID, "] Checking for node liveness: Node", id)
 		url := fmt.Sprintf("http://%s/health_check", successorAddr)
 		resp, err := http.Get(url)
 
 		if err != nil {
-			log.Fatalf("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
+			fmt.Println("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
 			continue
 		}
 

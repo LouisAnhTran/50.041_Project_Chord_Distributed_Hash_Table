@@ -101,12 +101,12 @@ func cycleCheck(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
 		return
 	}
-
 	chord.HandleCycleCheck(cycleCheckMessage)
 }
 
 func cycleCheckStart(c *gin.Context) {
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Starting cycle check...")
+	c.JSON(http.StatusOK, gin.H{"Message": "OK"})
 	chord.HandleCycleCheckStart()
 }
 
