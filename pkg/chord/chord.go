@@ -233,8 +233,32 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 		convert_identifier_to_replica_key,
 	}
 
+	var prev_preceding_note int
+	var hash_threshold int = 3
+
 	// Process each key in the list
 	for i, key := range keys {
+
+		closest_preceding_node := find_closest_preceding_node(key)
+
+		if i == 0 {
+			prev_preceding_note = closest_preceding_node
+		} else {
+			hash_counter := 0
+			// in case we end up with the same preceding node, since then successor would be the same node also
+			for prev_preceding_note == closest_preceding_node {
+				// this will trigger at hash(hash(hash(hash(hash(original_data)))))
+				if hash_counter >= hash_threshold {
+					break
+				}
+				// Simulate hash computation and update the key
+				identifierAsString := fmt.Sprintf("%v", key)
+				key = HashToRange(identifierAsString)
+				closest_preceding_node = find_closest_preceding_node(key)
+				hash_counter++
+			}
+			prev_preceding_note = closest_preceding_node
+		}
 
 		// we need to find the successor for this key first
 		// create new reques
@@ -252,8 +276,6 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 			})
 			return
 		}
-
-		closest_preceding_node := find_closest_preceding_node(key)
 
 		// if we succeed this should be two different nodes here
 		fmt.Println("closest preceding node: ", closest_preceding_node)
@@ -312,21 +334,17 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 		// so from the result get the node
 		node_to_store_data := responseBody.Successor
 		fmt.Println("id of node to store data, successor of data: ", node_to_store_data)
+		if i == 1 {
+			fmt.Println("Starting replication.")
+		}
 
 		node_to_store_data_address := config.AllNodeMap[node_to_store_data]
 		fmt.Println("the addresss of node to store data: ", node_to_store_data_address)
 
 		// now we send request requesting this node to store data
-		// Call internal store data function
-		if i == 0 {
-			// Send the response from the first key to the frontend (and only the first)
-			// since all the user needs to know is that the storing succeeded, and we hide the key anyways
-			send_request_to_successor_for_storing_data(node_to_store_data_address, req.Data, key, c)
-			return
-		} else {
-			// For subsequent keys, store data without returning a response
-			go send_request_to_successor_for_storing_data(node_to_store_data_address, req.Data, key, nil)
-		}
+		// that node will call internal store data function
+		// if you search logs, you will find two different nodes calling internal_store_data for one request
+		send_request_to_successor_for_storing_data(node_to_store_data_address, req.Data, key, c)
 
 	}
 
