@@ -1205,5 +1205,14 @@ func HandleContactDistantNode(nodeId int) {
 	addr := config.AllNodeMap[nodeId]
 	url := GenerateUrl(addr, "cycle_check")
 
-	http.Get(url)
+	res, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Dead node detected by /contact_distant.")
+		HandleInvoluntaryDeadNode(nodeId)
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("Non-200 response during /contact_distant.")
+		return
+	}
+	defer res.Body.Close()
 }
