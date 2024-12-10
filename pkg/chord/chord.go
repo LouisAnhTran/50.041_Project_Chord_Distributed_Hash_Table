@@ -925,8 +925,15 @@ func HandleInvoluntaryLeaveSequence(deadNodeId int) {
 			// Check the "message" field
 			if message, ok := body["message"].(string); ok && message == "good health" {
 				fmt.Printf("Node %d (%s) is healthy.\n", id, successorAddr)
-				// set this live node as new successor
-				localNode.Successor = id
+
+				// if live node is current successor, end operation
+				// else set this live node as new successor
+				if localNode.Successor == id {
+					fmt.Printf("Node %d: Current successor is still alive. Aborting operation...\n", localNode.ID)
+					return
+				} else {
+					localNode.Successor = id
+				}
 
 				// notify new successor
 				msg := models.InvoluntaryLeaveMessage{NewPredecessor: localNode.ID}
