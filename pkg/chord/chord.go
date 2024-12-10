@@ -850,7 +850,6 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 		deleteFromSuccessorList(msg.DepartingNodeID)
 		addToSuccessorList(msg.SuccessorListNode)
 		deleteNodeEntry(msg.DepartingNodeID)
-		UpdatePopulateFingerTable()
 
 		successorAddr := config.AllNodeMap[localNode.Successor]
 		successorUrl := GenerateUrl(successorAddr, "/leave_data")
@@ -880,7 +879,6 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 		fmt.Println("[ Node", localNode.ID, "] New predecessor:", localNode.Predecessor)
 
 		deleteNodeEntry(msg.DepartingNodeID)
-		UpdatePopulateFingerTable()
 		if len(msg.Data) > 0 {
 			localNode.UpdateData(msg.Data)
 		}
@@ -1137,6 +1135,7 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 // Starts the stabilization function for leaving/dying nodes
 func StartReconciliation() {
 	localNode := GetLocalNode()
+	UpdatePopulateFingerTable()
 	fmt.Println("[ Node", localNode.ID, "] Starting reconciliation process..")
 	sList := localNode.SuccessorList
 	msg := models.NewReconcileMessage(localNode.ID, config.AllNodeID, config.AllNodeMap).
