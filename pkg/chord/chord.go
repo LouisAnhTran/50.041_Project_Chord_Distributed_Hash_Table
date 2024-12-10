@@ -982,28 +982,44 @@ func HandleInvoluntaryDeadNode(deadNodeId int) {
 
 func BroadcastDeadNode(deadNodeId int) {
 	localNode := GetLocalNode()
-	msg := models.BroadcastMessage{DeadNode: deadNodeId}
-	jsonMsg, jsonErr := json.Marshal(msg)
-	if jsonErr != nil {
-		fmt.Println("[ Node", localNode.ID, "] JSON error during broadcast for involuntary node leave process.")
-	}
+	localBCQueue := []int{deadNodeId}
+	broadcastTracker := map[int]bool{} // to track broadcasted nodes
 
-	for _, nodeId := range config.AllNodeID {
-		nodeAddr := config.AllNodeMap[nodeId]
-		nodeUrl := GenerateUrl(nodeAddr, "receive_broadcast_dead_node")
+	for len(localBCQueue) > 0 {
+		currentDeadNode := localBCQueue[0]
+		localBCQueue = localBCQueue[1:]
 
-		res, err := http.Post(nodeUrl, "application/json", bytes.NewBuffer(jsonMsg))
-
-		if err != nil || res.StatusCode/500 >= 1 {
-			// detected target node is dead, new broadcast
-			BroadcastDeadNode(nodeId)
-		} else if res.StatusCode != http.StatusOK {
-			fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
-			fmt.Println("[ Node", localNode.ID, "] Aborting...")
-			return
+		msg := models.BroadcastMessage{DeadNode: currentDeadNode}
+		jsonMsg, jsonErr := json.Marshal(msg)
+		if jsonErr != nil {
+			fmt.Println("[ Node", localNode.ID, "] JSON error during broadcast for involuntary node leave process.")
 		}
-		defer res.Body.Close()
+
+		for _, nodeId := range config.AllNodeID {
+			if nodeId == currentDeadNode || broadcastTracker[nodeId] {
+				// skip nodes that are known to be dead and broadcasted
+				continue
+			}
+			nodeAddr := config.AllNodeMap[nodeId]
+			nodeUrl := GenerateUrl(nodeAddr, "receive_broadcast_dead_node")
+
+			res, err := http.Post(nodeUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+			if err != nil || res.StatusCode/500 >= 1 {
+				// detected target node is dead, new broadcast
+				fmt.Println("[ Node", localNode.ID, "] Detected dead node during broadcast:", nodeId)
+				localBCQueue = append(localBCQueue, nodeId)
+			} else if res.StatusCode != http.StatusOK {
+				fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
+				fmt.Println("[ Node", localNode.ID, "] Aborting...")
+				return
+			}
+
+			broadcastTracker[currentDeadNode] = true
+			defer res.Body.Close()
+		}
 	}
+
 }
 
 func HandleReceiveBroadcast(msg models.BroadcastMessage) {
