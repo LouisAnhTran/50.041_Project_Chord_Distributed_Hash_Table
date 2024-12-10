@@ -269,8 +269,8 @@ func health_check(c *gin.Context) {
 }
 
 func healthCheckDistant(c *gin.Context) {
-	nodeId, found := c.Params.Get("id")
-	if !found {
+	nodeId := c.Query("id")
+	if len(nodeId) == 0 {
 		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Missing node ID to be messaged.", ""))
 	}
 
