@@ -862,7 +862,7 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 
 		res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(dataJsonMsg))
 		if err != nil {
-			// TODO: Involuntary node leave here
+			HandleInvoluntaryDeadNode(localNode.Successor)
 		} else if res.StatusCode != http.StatusOK {
 			fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check initiation from successor at address", successorAddr)
 			fmt.Println("[ Node", localNode.ID, "] Aborting...")
@@ -1070,7 +1070,6 @@ func HandleCycleCheckStart() {
 	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
 
 	if err != nil || res.StatusCode/500 >= 1 {
-		// TODO: Add specific handler for involuntary node leave.
 		fmt.Println("[ Node", localNode.ID, "] Error sending cycle check initiation request to successor at address", successorAddr)
 		if err != nil {
 			fmt.Println("[ Node", localNode.ID, "]", err.Error())
@@ -1109,10 +1108,11 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 
 	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
 
-	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
-	if err != nil {
+	if err != nil || res.StatusCode/500 >= 1 {
 		fmt.Println("[ Node", localNode.ID, "] Error sending cycle check request to successor at address", successorAddr)
-		fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
 		HandleInvoluntaryDeadNode(localNode.Successor)
 		return
@@ -1143,10 +1143,11 @@ func StartReconciliation() {
 	predecessorUrl := GenerateUrl(predecessorAddr, "reconcile")
 
 	res, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
-	// TODO: Add specific handler for involuntary node leave if StatusCode is specifically a 5xx code.
-	if err != nil {
+	if err != nil || res.StatusCode/500 >= 1 {
 		fmt.Println("[ Node", localNode.ID, "] Error sending reconciliation message to predecessor at address", predecessorAddr)
-		fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
 		return
 	} else if res.StatusCode != http.StatusOK {
@@ -1185,12 +1186,12 @@ func HandleReconciliation(msg models.ReconcileMessage) {
 	predecessorUrl := GenerateUrl(predecessorAddr, "reconcile")
 	res, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
 	if err != nil || res.StatusCode/500 >= 1 {
-		// TODO: Add specific handler for involuntary node leave.
 		fmt.Println("[ Node", localNode.ID, "] Error forwarding reconciliation message to predecessor at address", predecessorAddr)
 		if err != nil {
 			fmt.Println("[ Node", localNode.ID, "]", err.Error())
 		}
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		HandleInvoluntaryDeadNode(localNode.Predecessor)
 		return
 	} else if res.StatusCode != http.StatusOK {
 		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during reconciliation with predecessor at address", predecessorAddr)
