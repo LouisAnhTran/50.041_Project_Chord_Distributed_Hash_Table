@@ -947,8 +947,6 @@ func HandleInvoluntaryLeaveSequence(deadNodeId int) {
 					fmt.Println("[ Node", localNode.ID, "] Aborting...")
 					return
 				}
-
-				StartReconciliation()
 				break
 			} else {
 				fmt.Printf("Node %d (%s) returned unexpected message: %v\n", id, successorAddr, body)
@@ -967,6 +965,7 @@ func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
 	newPredecessor := msg.NewPredecessor
 	localNode := GetLocalNode()
 	localNode.Predecessor = newPredecessor
+	StartReconciliation()
 }
 
 // Contacting Node checks whether the dead node is its successor
@@ -1122,6 +1121,7 @@ func HandleCycleCheck(msg models.CycleCheckMessage) {
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
 		return
 	}
+	fmt.Printf("Node %d's successorList: %v\n", localNode.ID, localNode.SuccessorList)
 	defer res.Body.Close()
 }
 

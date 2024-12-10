@@ -36,12 +36,22 @@ func SetupRoutes(router *gin.Engine) {
 
 func handleReceiveBroadcast(c *gin.Context) {
 	var msg models.BroadcastMessage
+	if err := c.BindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
 	c.JSON(http.StatusOK, "")
 	chord.HandleReceiveBroadcast(msg)
 }
 
 func handleNewSuccessorNotification(c *gin.Context) {
 	var msg models.InvoluntaryLeaveMessage
+	if err := c.BindJSON(&msg); err != nil {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Invalid JSON body", err.Error()))
+		return
+	}
+
 	c.JSON(http.StatusOK, "")
 	chord.HandleNodeInvoluntaryLeave(msg)
 }
