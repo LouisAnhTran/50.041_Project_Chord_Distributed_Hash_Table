@@ -1149,6 +1149,9 @@ func HandleReconciliation(msg models.ReconcileMessage) {
 	sList = append([]int{localNode.Successor}, sList...)
 	localNode.SuccessorList = sList
 
+	config.AllNodeID = msg.AllNodeId
+	config.AllNodeMap = msg.AllNodeMap
+
 	msg.SuccessorList = sList
 	msg.Sign(localNode.ID)
 	jsonMsg, jsonErr := json.Marshal(msg)
