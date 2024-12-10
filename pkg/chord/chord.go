@@ -983,7 +983,10 @@ func HandleInvoluntaryDeadNode(deadNodeId int) {
 func BroadcastDeadNode(deadNodeId int) {
 	localNode := GetLocalNode()
 	localBCQueue := []int{deadNodeId}
-	broadcastTracker := map[int]bool{} // to track broadcasted nodes
+	// trackers to prevent duplication
+	broadcastTracker := map[int]bool{} // track broadcasted nodes
+	queueTracker := map[int]bool{}     // track queued nodes
+	queueTracker[deadNodeId] = true
 
 	for len(localBCQueue) > 0 {
 		currentDeadNode := localBCQueue[0]
@@ -1007,8 +1010,11 @@ func BroadcastDeadNode(deadNodeId int) {
 
 			if err != nil || res.StatusCode/500 >= 1 {
 				// detected target node is dead, new broadcast
-				fmt.Println("[ Node", localNode.ID, "] Detected dead node during broadcast:", nodeId)
-				localBCQueue = append(localBCQueue, nodeId)
+				if !queueTracker[nodeId] {
+					fmt.Println("[ Node", localNode.ID, "] Detected dead node during broadcast:", nodeId)
+					localBCQueue = append(localBCQueue, nodeId)
+					queueTracker[nodeId] = true
+				}
 			} else if res.StatusCode != http.StatusOK {
 				fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
 				fmt.Println("[ Node", localNode.ID, "] Aborting...")
