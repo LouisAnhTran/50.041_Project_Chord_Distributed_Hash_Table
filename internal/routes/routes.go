@@ -18,7 +18,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/find_successor", find_successor)
 	router.POST("/store_data", store_data)
 	router.POST("/internal_store_data", internal_store_data)
-	router.POST("health_check_distant")
+	router.GET("health_check_distant", healthCheckDistant)
 	router.GET("/retrieve_data/:id", retrieve_data)
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
 	router.GET("/leave", leave)
@@ -268,7 +268,7 @@ func health_check(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "good health"})
 }
 
-func health_check_distant(c *gin.Context) {
+func healthCheckDistant(c *gin.Context) {
 	nodeId, found := c.Params.Get("id")
 	if !found {
 		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Missing node ID to be messaged.", ""))
