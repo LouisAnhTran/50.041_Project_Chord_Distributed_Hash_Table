@@ -18,6 +18,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/find_successor", find_successor)
 	router.POST("/store_data", store_data)
 	router.POST("/internal_store_data", internal_store_data)
+	router.POST("health_check_distant")
 	router.GET("/retrieve_data/:id", retrieve_data)
 	router.GET("/internal_retrieve_data/:id", internal_retrieve_data)
 	router.GET("/leave", leave)
@@ -265,6 +266,21 @@ func find_successor(c *gin.Context) {
 
 func health_check(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "good health"})
+}
+
+func health_check_distant(c *gin.Context) {
+	nodeId, found := c.Params.Get("id")
+	if !found {
+		c.JSON(http.StatusBadRequest, models.NewHTTPErrorMessage("Missing node ID to be messaged.", ""))
+	}
+
+	nodeIdInt, err := strconv.Atoi(nodeId)
+	if err != nil {
+		fmt.Println("Error converting id from string to integer.")
+		c.JSON(http.StatusInternalServerError, models.NewHTTPErrorMessage("Error converting id from string to integer.", err.Error()))
+	}
+
+	chord.HandleDistantHealthCheck(nodeIdInt)
 }
 
 func getNodeAddressAndIdentifier(c *gin.Context) {

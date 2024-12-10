@@ -1200,3 +1200,10 @@ func HandleReconciliation(msg models.ReconcileMessage) {
 	}
 	defer res.Body.Close()
 }
+
+func HandleDistantHealthCheck(nodeId int) {
+	addr := config.AllNodeMap[nodeId]
+	url := GenerateUrl(addr, "health_check")
+
+	http.Get(url)
+}
