@@ -122,11 +122,6 @@ func find_successor_for_fingertable_entry(entry_index int) int {
 	return config.AllNodeID[found_index]
 }
 
-// function to update finger table; used in stabilize function
-func fixFingerTable() {
-	// TODO
-}
-
 // Populates successor list with size log(N)
 func PopulateSuccessorList() {
 	numOfNodes := len(config.AllNodeID)
@@ -150,23 +145,6 @@ func PopulateSuccessorList() {
 		successorId := config.AllNodeID[currentPos]
 		local_node.SuccessorList = append(local_node.SuccessorList, successorId)
 	}
-}
-
-// getter and setter using RWMutex since more reads are expected than writes
-func getSuccessorList() []int {
-	local_node.RWLock.RLock()
-	defer local_node.RWLock.RUnlock()
-
-	return local_node.SuccessorList
-}
-
-// function to update successor list; used in stabilize function
-func updateSuccessorList() {
-	local_node.RWLock.Lock()
-	defer local_node.RWLock.Unlock()
-
-	// TODO: reconcile successor list with successor and prepend successor to list
-	// Note: this is useless for node voluntary leave case (for current design)
 }
 
 // safely appends new successor id to successor list
@@ -204,14 +182,6 @@ func deleteNodeEntry(nodeId int) {
 
 	// delete from AllNodeMap map
 	delete(config.AllNodeMap, nodeId)
-}
-
-// function called after node leave/join to maintain consistency across all nodes
-func stabilize(allNodeID []int, allNodeMap map[int]string) {
-	// TODO
-	updateSuccessorList()
-	fixFingerTable()
-	// propagate updated AllNodeID and AllNodeMap through successors
 }
 
 // InRange checks if a target ID is in the range (start, end) on the Chord ring.
