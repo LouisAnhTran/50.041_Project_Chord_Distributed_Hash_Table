@@ -223,8 +223,6 @@ func InitChordRingStructure() {
 
 func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 	convert_data_to_identifier := HashToRange(req.Data)
-func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
-	convert_data_to_identifier := HashToRange(req.Data)
 
 	fmt.Println("the key of this data is: ", convert_data_to_identifier)
 
