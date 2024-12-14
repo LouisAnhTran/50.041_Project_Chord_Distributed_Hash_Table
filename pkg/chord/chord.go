@@ -9,7 +9,10 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/LouisAnhTran/50.041_Project_Chord_Distributed_Hash_Table/config"
@@ -213,9 +216,13 @@ func InitChordRingStructure() {
 
 	// Populate Finger Table
 	PopulateFingerTable()
-	fmt.Println("my all node id: ", config.AllNodeID, " || my id is: ", local_node.ID, " || my finger table: ", local_node.FingerTable, " || my map: ", config.AllNodeMap, " || my successor: ", local_node.Successor, " || predecessor: ", local_node.Predecessor)
+	// Populate Successor List
+	PopulateSuccessorList()
+	fmt.Println("my all node id: ", config.AllNodeID, " || my id is: ", local_node.ID, " || my finger table: ", local_node.FingerTable, " || my successor list: ", local_node.SuccessorList, " || my map: ", config.AllNodeMap, " || my successor: ", local_node.Successor, " || predecessor: ", local_node.Predecessor)
 }
 
+func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
+	convert_data_to_identifier := HashToRange(req.Data)
 func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 	convert_data_to_identifier := HashToRange(req.Data)
 
@@ -445,10 +452,6 @@ func HandleFindSuccessor(req models.FindSuccessorRequest, c *gin.Context) {
 func HandleInternalStoreData(request models.InternalStoreDataRequest, c *gin.Context) {
 	// simply store data to to this machine
 	local_node.Data[request.Key] = request.Data
-
-	// machine data storage after storing the data
-	fmt.Println("hash table after storing key-value pair: ", local_node.Data)
-	fmt.Println()
 
 	c.JSON(http.StatusOK, models.InternalStoreDataResponse{
 		Message: "Stored data successfully",
@@ -839,4 +842,434 @@ func HandleUpdateMetaData(request models.UpdateMetadataUponNewNodeJoinRequest, c
 	c.JSON(http.StatusOK, models.UpdateMetadataUponNewNodeJoinResponse{
 		Message: "Successfully updated All Node Map, All Node ID and Finger table with joined node's ID and Address",
 	})
+}
+
+// Starts voluntary leave sequence for a node
+func HandleLeaveSequence() {
+	defer os.Exit(0) // Kill node
+
+	localNode := GetLocalNode()
+	msg := *localNode.NewLeaveRingMessage()
+	fmt.Println("[ Node", localNode.ID, "] LeaveRingMessage:", msg)
+
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] Error during LeaveRingMessage JSON conversion.")
+	}
+
+	successorAddr := config.AllNodeMap[localNode.Successor]
+	predecessorAddr := config.AllNodeMap[localNode.Predecessor]
+	successorUrl := GenerateUrl(successorAddr, "notify_leave")
+	predecessorUrl := GenerateUrl(predecessorAddr, "notify_leave")
+
+	// Send POST request to successor
+	sRes, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] Error sending leave request to successor at address", successorAddr)
+		fmt.Println(err.Error())
+	}
+	defer sRes.Body.Close()
+
+	// Send POST request to predecessor
+	pRes, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] Error sending leave request to predecessor at address", predecessorAddr)
+		fmt.Println(err.Error())
+	}
+	defer pRes.Body.Close()
+
+	// The node is assumed to have left at this point. Any faults happening here will be
+	// dealt by the successors and predecessors.
+}
+
+// Handles leave sequence for a leaving node
+func HandleNodeLeave(msg models.LeaveRingMessage) {
+	localNode := GetLocalNode()
+	if msg.DepartingNodeID == localNode.Successor {
+		fmt.Println("[ Node", localNode.ID, "] Replacing successor with Node "+
+			strconv.Itoa(msg.DepartingNodeID)+
+			"'s successor Node", msg.NewSuccessor)
+
+		localNode.Successor = msg.NewSuccessor
+		fmt.Println("[ Node", localNode.ID, "] New successor:", localNode.Successor)
+
+		// Update successor list and node entries
+		deleteFromSuccessorList(msg.DepartingNodeID)
+		addToSuccessorList(msg.SuccessorListNode)
+		deleteNodeEntry(msg.DepartingNodeID)
+
+		successorAddr := config.AllNodeMap[localNode.Successor]
+		successorUrl := GenerateUrl(successorAddr, "/leave_data")
+
+		dataMsg := models.NewDataUpdateMessage(msg.DepartingNodeID, localNode.ID, msg.Data)
+		dataJsonMsg, err := json.Marshal(dataMsg)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "] Error during DataUpdateMessage JSON conversion.")
+		}
+
+		res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(dataJsonMsg))
+		if err != nil {
+			HandleInvoluntaryDeadNode(localNode.Successor)
+		} else if res.StatusCode != http.StatusOK {
+			fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check initiation from successor at address", successorAddr)
+			fmt.Println("[ Node", localNode.ID, "] Aborting...")
+			return
+		}
+
+		StartReconciliation()
+	} else if msg.DepartingNodeID == localNode.Predecessor {
+		fmt.Println("[ Node", localNode.ID, "] Replacing predecessor with Node"+
+			strconv.Itoa(msg.DepartingNodeID)+
+			"'s predecessor Node", msg.NewPredecessor)
+
+		localNode.Predecessor = msg.NewPredecessor
+		fmt.Println("[ Node", localNode.ID, "] New predecessor:", localNode.Predecessor)
+
+		deleteNodeEntry(msg.DepartingNodeID)
+		if len(msg.Data) > 0 {
+			localNode.UpdateData(msg.Data)
+		}
+	} else {
+		fmt.Println("[ Node", localNode.ID, "] LeaveRingMessage received from a Node that is neither the successor nor predecessor of this node.")
+		fmt.Println("[ Node", localNode.ID, "]", msg)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	}
+}
+
+func HandleInvoluntaryLeaveSequence(deadNodeId int) {
+	localNode := GetLocalNode()
+	// predecessor will double check if broadcasted dead node is actually dead
+	for _, id := range localNode.SuccessorList {
+		successorAddr := config.AllNodeMap[id]
+		// call health check on each node
+
+		fmt.Println("[ Node", GetLocalNode().ID, "] Checking for node liveness: Node", id)
+		url := fmt.Sprintf("http://%s/health_check", successorAddr)
+		resp, err := http.Get(url)
+
+		if err != nil {
+			fmt.Printf("Node %d (%s) is unresponsive: %v\n", id, successorAddr, err)
+			// double check passes, remove dead node from AllNodeID
+			if id == deadNodeId {
+				deleteNodeEntry(id)
+			}
+			continue
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			// Decode JSON response into a map
+			var body map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				fmt.Println("Error decoding response body", err)
+				continue
+			}
+
+			// Check the "message" field
+			if message, ok := body["message"].(string); ok && message == "good health" {
+				fmt.Printf("Node %d (%s) is healthy.\n", id, successorAddr)
+
+				// if live node is current successor, end operation
+				// else set this live node as new successor
+				if localNode.Successor == id {
+					fmt.Printf("Node %d: Current successor is still alive. Aborting operation...\n", localNode.ID)
+					return
+				} else {
+					localNode.Successor = id
+				}
+
+				// notify new successor
+				msg := models.InvoluntaryLeaveMessage{NewPredecessor: localNode.ID}
+
+				jsonMsg, jsonErr := json.Marshal(msg)
+				if jsonErr != nil {
+					fmt.Println("[ Node", localNode.ID, "] JSON error during relink for involuntary node leave process.")
+				}
+
+				successorUrl := GenerateUrl(successorAddr, "notify_new_successor")
+
+				res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+				if err != nil {
+					// new successor might have suddenly died, skip to the next successor
+					fmt.Printf("Successor %d suddenly died. Trying next successor...\n", id)
+					continue
+				} else if res.StatusCode != http.StatusOK {
+					fmt.Println("[ Node", localNode.ID, "] Non-200 response received during relink to successor at address", successorAddr, "for involuntary node leave process.")
+					fmt.Println("[ Node", localNode.ID, "] Aborting...")
+					return
+				}
+				break
+			} else {
+				fmt.Printf("Node %d (%s) returned unexpected message: %v\n", id, successorAddr, body)
+			}
+		} else {
+			fmt.Printf("Node %d (%s) returned unhealthy status: %d\n", id, successorAddr, resp.StatusCode)
+		}
+	}
+
+	// TODO:
+	// Modified closest_preceding_node (in fig 5) searches not only the finger table but also the successor list for the most immediate predecessor of id.
+	// If a node fails during the find_successor, the lookup proceeds, after a timeout, by trying the next best predecessor (of key k) among the nodes in the finger table and the successor list (only choose from finger table if no node better precedes successor list's best predecessor than from finger table's).
+}
+
+func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
+	newPredecessor := msg.NewPredecessor
+	localNode := GetLocalNode()
+	localNode.Predecessor = newPredecessor
+	StartReconciliation()
+}
+
+// Contacting Node checks whether the dead node is its successor
+func HandleInvoluntaryDeadNode(deadNodeId int) {
+	localNode := GetLocalNode()
+	if deadNodeId == localNode.Successor {
+		HandleInvoluntaryLeaveSequence(deadNodeId)
+	} else {
+		// broadcast dead node id to let its corresponding predecessor to handle it
+		BroadcastDeadNode(deadNodeId)
+	}
+}
+
+func BroadcastDeadNode(deadNodeId int) {
+	localNode := GetLocalNode()
+	localBCQueue := []int{deadNodeId}
+	// trackers to prevent duplication
+	broadcastTracker := map[int]bool{} // track broadcasted nodes
+	queueTracker := map[int]bool{}     // track queued nodes
+	queueTracker[deadNodeId] = true
+
+	for len(localBCQueue) > 0 {
+		currentDeadNode := localBCQueue[0]
+		localBCQueue = localBCQueue[1:]
+
+		msg := models.BroadcastMessage{DeadNode: currentDeadNode}
+		jsonMsg, jsonErr := json.Marshal(msg)
+		if jsonErr != nil {
+			fmt.Println("[ Node", localNode.ID, "] JSON error during broadcast for involuntary node leave process.")
+		}
+
+		for _, nodeId := range config.AllNodeID {
+			if nodeId == currentDeadNode || broadcastTracker[nodeId] {
+				// skip nodes that are known to be dead and broadcasted
+				continue
+			}
+			nodeAddr := config.AllNodeMap[nodeId]
+			nodeUrl := GenerateUrl(nodeAddr, "receive_broadcast_dead_node")
+
+			res, err := http.Post(nodeUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+			if err != nil || res.StatusCode/500 >= 1 {
+				// detected target node is dead, new broadcast
+				if !queueTracker[nodeId] {
+					fmt.Println("[ Node", localNode.ID, "] Detected dead node during broadcast:", nodeId)
+					localBCQueue = append(localBCQueue, nodeId)
+					queueTracker[nodeId] = true
+				}
+			} else if res.StatusCode != http.StatusOK {
+				fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
+				fmt.Println("[ Node", localNode.ID, "] Aborting...")
+				return
+			}
+
+			broadcastTracker[currentDeadNode] = true
+			defer res.Body.Close()
+		}
+	}
+
+}
+
+func HandleReceiveBroadcast(msg models.BroadcastMessage) {
+	localNode := GetLocalNode()
+	deadNodeId := msg.DeadNode
+
+	// check if dead node is its successor
+	if deadNodeId == localNode.Successor {
+		HandleInvoluntaryLeaveSequence(deadNodeId)
+	} else {
+		// do nothing
+		return
+	}
+}
+
+func find_closest_preceding_node(node_id int) int {
+	for i := len(local_node.FingerTable) - 1; i >= 0; i-- {
+		for k, v := range local_node.FingerTable[i] {
+			fmt.Println("k is: ", k, " v: ", v)
+			if v < node_id {
+				return v
+			}
+		}
+	}
+	return local_node.Successor
+}
+
+func HandleCycleCheckStart() {
+	localNode := GetLocalNode()
+	msg := *models.NewCycleCheckMessage()
+	msg.Initiator = localNode.ID
+	msg.Nodes = append(msg.Nodes, localNode.ID)
+
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] JSON error during cycle check initiation.")
+		return
+	}
+
+	successorAddr := config.AllNodeMap[localNode.Successor]
+	successorUrl := GenerateUrl(successorAddr, "cycle_check")
+
+	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	if err != nil || res.StatusCode/500 >= 1 {
+		fmt.Println("[ Node", localNode.ID, "] Error sending cycle check initiation request to successor at address", successorAddr)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		// handle involuntary node leave.
+		HandleInvoluntaryDeadNode(localNode.Successor)
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check initiation from successor at address", successorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	}
+	defer res.Body.Close()
+}
+
+func HandleCycleCheck(msg models.CycleCheckMessage) {
+	localNode := GetLocalNode()
+	if slices.Contains(msg.Nodes, localNode.ID) {
+		nodeStructString := "<- " + strings.Trim(strings.Join(strings.Fields(fmt.Sprint(msg.Nodes)), " <-> "), "[]") + " ->"
+		fmt.Println("[ Node", localNode.ID, "] Cycle check finished. ")
+		fmt.Println("[ Node", localNode.ID, "] Initiator:", msg.Initiator)
+		fmt.Println("[ Node", localNode.ID, "] Ring structure:", nodeStructString)
+		return
+	}
+
+	fmt.Println("[ Node", localNode.ID, "] Forwarding cycle check...")
+	msg.Nodes = append(msg.Nodes, localNode.ID)
+	jsonMsg, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("[ Node", localNode.ID, "] JSON error during cycle check.")
+	}
+
+	successorAddr := config.AllNodeMap[localNode.Successor]
+	successorUrl := GenerateUrl(successorAddr, "cycle_check")
+
+	res, err := http.Post(successorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+
+	if err != nil || res.StatusCode/500 >= 1 {
+		fmt.Println("[ Node", localNode.ID, "] Error sending cycle check request to successor at address", successorAddr)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		HandleInvoluntaryDeadNode(localNode.Successor)
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during cycle check from successor at address", successorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	}
+	fmt.Printf("Node %d's successorList: %v\n", localNode.ID, localNode.SuccessorList)
+	defer res.Body.Close()
+}
+
+// Starts the stabilization function for leaving/dying nodes
+func StartReconciliation() {
+	localNode := GetLocalNode()
+	UpdatePopulateFingerTable()
+	fmt.Println("[ Node", localNode.ID, "] Starting reconciliation process..")
+	sList := localNode.SuccessorList
+	msg := models.NewReconcileMessage(localNode.ID, config.AllNodeID, config.AllNodeMap).
+		SetSuccessorList(sList).
+		Sign(localNode.ID)
+
+	jsonMsg, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		fmt.Println("[ Node", localNode.ID, "] JSON error during reconciliation start process.")
+	}
+
+	predecessorAddr := config.AllNodeMap[localNode.Predecessor]
+	predecessorUrl := GenerateUrl(predecessorAddr, "reconcile")
+
+	res, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+	if err != nil || res.StatusCode/500 >= 1 {
+		fmt.Println("[ Node", localNode.ID, "] Error sending reconciliation message to predecessor at address", predecessorAddr)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during reconciliation with predecessor at address", predecessorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	}
+	defer res.Body.Close()
+}
+
+func HandleReconciliation(msg models.ReconcileMessage) {
+	localNode := GetLocalNode()
+	if slices.Contains(msg.Signed, localNode.ID) {
+		fmt.Println("[ Node", localNode.ID, "] Reconciliation sequence completed.")
+		fmt.Println("[ Node", localNode.ID, "] Initiator:", msg.Initiator)
+		fmt.Println("[ Node", localNode.ID, "] Signed:", msg.Signed)
+		return
+	}
+	fmt.Println("[ Node", localNode.ID, "] Forwarding reconciliation message...")
+
+	sList := msg.SuccessorList[:len(msg.SuccessorList)-1]
+	sList = append([]int{localNode.Successor}, sList...)
+	localNode.SuccessorList = sList
+
+	config.AllNodeID = msg.AllNodeId
+	config.AllNodeMap = msg.AllNodeMap
+	UpdatePopulateFingerTable()
+
+	msg.SuccessorList = sList
+	msg.Sign(localNode.ID)
+	jsonMsg, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		fmt.Println("[ Node", localNode.ID, "] JSON error during reconciliation forwarding process.")
+	}
+
+	predecessorAddr := config.AllNodeMap[localNode.Predecessor]
+	predecessorUrl := GenerateUrl(predecessorAddr, "reconcile")
+	res, err := http.Post(predecessorUrl, "application/json", bytes.NewBuffer(jsonMsg))
+	if err != nil || res.StatusCode/500 >= 1 {
+		fmt.Println("[ Node", localNode.ID, "] Error forwarding reconciliation message to predecessor at address", predecessorAddr)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		HandleInvoluntaryDeadNode(localNode.Predecessor)
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during reconciliation with predecessor at address", predecessorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	}
+	defer res.Body.Close()
+}
+
+func HandleContactDistantNode(nodeId int) {
+	addr := config.AllNodeMap[nodeId]
+	url := GenerateUrl(addr, "cycle_check")
+
+	res, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Dead node detected by /contact_distant.")
+		HandleInvoluntaryDeadNode(nodeId)
+		return
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("Non-200 response during /contact_distant.")
+		return
+	}
+	defer res.Body.Close()
 }
