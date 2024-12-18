@@ -351,6 +351,8 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 		// if you search logs, you will find two different nodes calling internal_store_data for one request
 		send_request_to_successor_for_storing_data(node_to_store_data_address, req.Data, key, c)
 
+		// new todo
+		ReplicaMap[convert_data_to_identifier] = convert_identifier_to_replica_key
 	}
 
 }
@@ -1270,4 +1272,150 @@ func HandleContactDistantNode(nodeId int) {
 		return
 	}
 	defer res.Body.Close()
+
+}
+
+func HandleRetrieveDataWithDuplication(key int, c *gin.Context) {
+	fmt.Printf("Attempting retrieval for primary key: %d\n", key)
+
+	// Attempt retrieval from the primary node
+	primarySuccess := attemptRetrieveData(key, c)
+
+	if primarySuccess {
+		fmt.Println("Primary retrieval succeeded.")
+		return
+	}
+
+	// If primary retrieval fails, attempt retrieval from the replica key
+	fmt.Println("Primary node retrieval failed. Attempting replica retrieval...")
+
+	// Retrieve the replica key (this should be the pre-computed replica key from the storage phase)
+	replicaKey := retrieveReplicaKeyFromStoragePhase(key)
+
+	fmt.Printf("Attempting retrieval for replica key: %d\n", replicaKey)
+	replicaSuccess := attemptRetrieveData(replicaKey, c)
+
+	if replicaSuccess {
+		fmt.Println("Replica retrieval succeeded.")
+		return
+	}
+
+	// If all attempts fail, respond with an error
+	fmt.Println("All retrieval attempts failed.")
+	c.JSON(http.StatusNotFound, gin.H{
+		"message": "Data not found on any available node.",
+	})
+}
+
+var ReplicaMap = make(map[int]int) // maps primaryKey -> replicaKey
+
+func retrieveReplicaKeyFromStoragePhase(primaryKey int) int {
+	return ReplicaMap[primaryKey]
+}
+
+func attemptRetrieveData(key int, c *gin.Context) bool {
+	find_successor_request := models.FindSuccessorRequest{Key: key}
+	jsonData, err := json.Marshal(find_successor_request)
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return false
+	}
+
+	// Attempt multiple nodes if needed
+	client := &http.Client{}
+	var successorNode int
+	var foundSuccessor bool
+
+	// Try to find the successor starting from multiple known nodes (not just closestPrecedingNode)
+	for _, nodeID := range config.AllNodeID {
+		address := config.AllNodeMap[nodeID]
+		if address == "" {
+			continue
+		}
+
+		url := fmt.Sprintf("http://%s/find_successor", address)
+		newReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			fmt.Println("Error creating request:", err)
+			continue
+		}
+
+		response, err := client.Do(newReq)
+		if err != nil {
+			fmt.Printf("Error contacting node %s for key %d: %v\n", address, key, err)
+			// Node might be down; consider removing it from AllNodeMap/AllNodeID
+			removeNodeFromRing(nodeID)
+			continue
+		}
+
+		// If not 200, node can't help us
+		if response.StatusCode != http.StatusOK {
+			fmt.Printf("Error: received non-200 response status: %d from %s\n", response.StatusCode, address)
+			response.Body.Close()
+			removeNodeFromRing(nodeID)
+			continue
+		}
+
+		var responseBody models.FindSuccessorSuccessResponse
+		if err := json.NewDecoder(response.Body).Decode(&responseBody); err != nil {
+			fmt.Println("Error decoding response body:", err)
+			response.Body.Close()
+			continue
+		}
+		response.Body.Close()
+
+		successorNode = responseBody.Successor
+		foundSuccessor = true
+		break
+	}
+
+	if !foundSuccessor {
+		fmt.Println("Could not find any successor due to node failures.")
+		return false
+	}
+
+	successorAddress := config.AllNodeMap[successorNode]
+	if successorAddress == "" {
+		fmt.Println("Successor address not found in AllNodeMap.")
+		return false
+	}
+
+	// Attempt to retrieve data from the successor node
+	internalRetrieveURL := fmt.Sprintf("http://%s/internal_retrieve_data/%d", successorAddress, key)
+	retrieveResp, err := client.Get(internalRetrieveURL)
+	if err != nil {
+		fmt.Printf("Error retrieving data from node %s: %v\n", successorAddress, err)
+		// Node might be down
+		removeNodeFromRing(successorNode)
+		return false
+	}
+	defer retrieveResp.Body.Close()
+
+	if retrieveResp.StatusCode != http.StatusOK {
+		fmt.Printf("Node %s could not retrieve data for key %d\n", successorAddress, key)
+		return false
+	}
+
+	var retrieveDataResponse models.InternalRetrieveDataResponse
+	if err := json.NewDecoder(retrieveResp.Body).Decode(&retrieveDataResponse); err != nil {
+		fmt.Println("Error decoding internal retrieve response:", err)
+		return false
+	}
+
+	// Return the retrieved data
+	fmt.Printf("Successfully retrieved data from node %s: %s\n", successorAddress, retrieveDataResponse.Data)
+	c.JSON(http.StatusOK, retrieveDataResponse)
+	return true
+}
+
+func removeNodeFromRing(nodeID int) {
+	// Safely remove the node from AllNodeMap and AllNodeID
+	delete(config.AllNodeMap, nodeID)
+	for i, id := range config.AllNodeID {
+		if id == nodeID {
+			config.AllNodeID = append(config.AllNodeID[:i], config.AllNodeID[i+1:]...)
+			break
+		}
+	}
+	fmt.Printf("Node %d removed from ring due to failure.\n", nodeID)
 }

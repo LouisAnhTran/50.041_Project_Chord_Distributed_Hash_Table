@@ -33,6 +33,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/update_metadata", update_metadata)
 	router.POST("/notify_new_successor", handleNewSuccessorNotification)
 	router.POST("/receive_broadcast_dead_node", handleReceiveBroadcast)
+	router.GET("/retrieve_data_with_duplication/:key", retrieve_data_with_duplication)
 }
 
 func handleReceiveBroadcast(c *gin.Context) {
@@ -286,4 +287,20 @@ func contactDistant(c *gin.Context) {
 func getNodeAddressAndIdentifier(c *gin.Context) {
 	node_identifier := chord.HashToRange(os.Getenv("NODE_ADDRESS"))
 	c.JSON(http.StatusOK, gin.H{"data": node_identifier})
+}
+
+func retrieve_data_with_duplication(c *gin.Context) {
+	// Parse key from the URL parameter
+	keyStr := c.Param("key")
+
+	key, err := strconv.Atoi(keyStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.RetrieveDataResponse{Message: "Invalid key format"})
+		return
+	}
+
+	fmt.Println("Attempting to retrieve data with duplication for key: ", key)
+
+	// Call the enhanced retrieval handler
+	chord.HandleRetrieveDataWithDuplication(key, c)
 }
