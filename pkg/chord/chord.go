@@ -1021,6 +1021,7 @@ func BroadcastDeadNode(deadNodeId int) {
 					localBCQueue = append(localBCQueue, nodeId)
 					queueTracker[nodeId] = true
 				}
+				broadcastTracker[currentDeadNode] = true
 				continue
 			} else if res.StatusCode != http.StatusOK {
 				fmt.Println("[ Node", localNode.ID, "] Non-200 response received during broadcast to node at address", nodeAddr)
