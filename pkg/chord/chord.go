@@ -987,6 +987,7 @@ func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
 
 		localNode.Predecessor = newPredecessor
 		StartReconciliation()
+		return
 	} else if res.StatusCode != http.StatusOK {
 		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during health check of predecessor at address", predecessorAddr)
 		fmt.Println("[ Node", localNode.ID, "] Aborting...")
