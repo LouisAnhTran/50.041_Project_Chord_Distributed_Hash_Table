@@ -880,7 +880,7 @@ func HandleNodeLeave(msg models.LeaveRingMessage) {
 
 		deleteNodeEntry(msg.DepartingNodeID)
 		if len(msg.Data) > 0 {
-			localNode.UpdateData(msg.Data)
+			localNode.CheckAndStoreKeys(msg.Data)
 		}
 	} else {
 		fmt.Println("[ Node", localNode.ID, "] LeaveRingMessage received from a Node that is neither the successor nor predecessor of this node.")
