@@ -1227,3 +1227,38 @@ func HandleContactDistantNode(nodeId int) {
 	}
 	defer res.Body.Close()
 }
+
+func HandlePredecessorData(msg models.DataUpdateMessage) {
+	localNode := GetLocalNode()
+	predecessorId := msg.SenderID
+	data := msg.Data
+
+	if localNode.Predecessor != predecessorId {
+		predecessorAddr := config.AllNodeMap[localNode.Predecessor]
+		predecessorUrl := GenerateUrl(predecessorAddr, "health_check")
+
+		res, err := http.Get(predecessorUrl)
+		fmt.Println("[ Node", localNode.ID, "] Missing relink message from leaving node detected. Checking health of predecessor at address", predecessorAddr)
+		if err != nil || res.StatusCode/500 >= 1 {
+			fmt.Println("[ Node", localNode.ID, "] Predecessor at address", predecessorAddr, "confirmed to have left or died.")
+			fmt.Println("[ Node", localNode.ID, "] Replacing predecessor with Node", predecessorId)
+			if err != nil {
+				fmt.Println("[ Node", localNode.ID, "]", err.Error())
+			}
+
+			localNode.Predecessor = predecessorId
+			localNode.CheckAndStoreKeys(data)
+			return
+		} else if res.StatusCode != http.StatusOK {
+			fmt.Println("[ Node", localNode.ID, "] Non-200 response received during health check of predecessor at address", predecessorAddr)
+			fmt.Println("[ Node", localNode.ID, "] Aborting...")
+			return
+		} else {
+			fmt.Println("[ Node", localNode.ID, "] Predecessor at address", predecessorAddr, "still alive!")
+			fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		}
+		defer res.Body.Close()
+	} else {
+		fmt.Println("[ Node", localNode.ID, "] No problems detected during Relink. Dropping predecessor message...")
+	}
+}

@@ -91,6 +91,8 @@ func updateDataOnLeave(c *gin.Context) {
 	c.JSON(http.StatusOK, "")
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Received data of Node", msg.DepartingNodeID, "from Node", msg.SenderID)
 	fmt.Println("[ Node", chord.GetLocalNode().ID, "] Data:", msg.Data)
+
+	chord.HandlePredecessorData(msg)
 }
 
 func relink(c *gin.Context) {

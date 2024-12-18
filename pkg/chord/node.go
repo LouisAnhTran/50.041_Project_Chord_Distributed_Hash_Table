@@ -2,6 +2,7 @@ package chord
 
 import (
 	// "fmt"
+	"fmt"
 	"os"
 	"sync"
 
@@ -52,5 +53,24 @@ func (n *Node) NewLeaveRingMessage() *models.LeaveRingMessage {
 		SuccessorListNode: lastNodeInSuccessorList,
 		NewSuccessor:      n.Successor,
 		NewPredecessor:    n.Predecessor,
+	}
+}
+
+func (n *Node) CheckAndStoreKeys(data map[int]string) {
+	keys := make([]int, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+
+	for _, k := range keys {
+		_, exists := data[k]
+		if exists {
+			delete(data, k)
+		}
+	}
+
+	if len(data) > 0 {
+		fmt.Println("[ Node", n.ID, "] Un-stored keys from leaving node detected. Updating data...")
+		n.UpdateData(data)
 	}
 }
