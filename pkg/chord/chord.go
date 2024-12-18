@@ -971,8 +971,31 @@ func HandleInvoluntaryLeaveSequence(deadNodeId int) {
 func HandleNodeInvoluntaryLeave(msg models.InvoluntaryLeaveMessage) {
 	newPredecessor := msg.NewPredecessor
 	localNode := GetLocalNode()
-	localNode.Predecessor = newPredecessor
-	StartReconciliation()
+
+	// check current predecessor's status
+	predecessorAddr := config.AllNodeMap[localNode.Predecessor]
+	url := fmt.Sprintf("http://%s/health_check", predecessorAddr)
+	res, err := http.Get(url)
+
+	fmt.Println("[ Node", localNode.ID, "] Node Involuntary Leave Handler: Checking health of predecessor at address", predecessorAddr)
+	if err != nil || res.StatusCode/500 >= 1 {
+		fmt.Println("[ Node", localNode.ID, "] Predecessor at address", predecessorAddr, "confirmed to have left or died.")
+		fmt.Println("[ Node", localNode.ID, "] Replacing predecessor with Node", newPredecessor)
+		if err != nil {
+			fmt.Println("[ Node", localNode.ID, "]", err.Error())
+		}
+
+		localNode.Predecessor = newPredecessor
+		StartReconciliation()
+	} else if res.StatusCode != http.StatusOK {
+		fmt.Println("[ Node", localNode.ID, "] Non-200 response received during health check of predecessor at address", predecessorAddr)
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+		return
+	} else {
+		fmt.Println("[ Node", localNode.ID, "] Predecessor at address", predecessorAddr, "still alive!")
+		fmt.Println("[ Node", localNode.ID, "] Aborting...")
+	}
+	defer res.Body.Close()
 }
 
 // Contacting Node checks whether the dead node is its successor

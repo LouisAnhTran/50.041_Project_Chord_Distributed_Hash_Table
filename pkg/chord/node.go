@@ -63,7 +63,7 @@ func (n *Node) CheckAndStoreKeys(data map[int]string) {
 	}
 
 	for _, k := range keys {
-		_, exists := data[k]
+		_, exists := n.Data[k]
 		if exists {
 			delete(data, k)
 		}
