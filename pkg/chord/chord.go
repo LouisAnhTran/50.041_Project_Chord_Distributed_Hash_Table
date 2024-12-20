@@ -245,7 +245,7 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 	for i, key := range keys {
 
 		closest_preceding_node := find_closest_preceding_node(key)
-
+		
 		if i == 0 {
 			prev_preceding_note = closest_preceding_node
 		} else {
@@ -253,6 +253,8 @@ func HandleStoreData(req models.StoreDataRequest, c *gin.Context) {
 			// in case we end up with the same preceding node, since then successor would be the same node also
 			for prev_preceding_note == closest_preceding_node {
 				// this will trigger at hash(hash(hash(hash(hash(original_data)))))
+				// which is hash(hash(hash(hash(original_key))))
+				// which is hash(hash(hash(initial_replica_key))) => hash counter sets how many rehashes are done here
 				if hash_counter >= hash_threshold {
 					break
 				}
